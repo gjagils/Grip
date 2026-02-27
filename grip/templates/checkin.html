@@ -15,7 +15,73 @@
 </div>
 {% endif %}
 
-<form method="POST" action="/api/checkin">
+<!-- Dagelijkse taken -->
+<div class="card">
+    <div class="card-header">
+        <h2>&#x2611;&#xFE0F; Taken vandaag</h2>
+    </div>
+
+    {% if daily_tasks %}
+    <div class="task-list" id="daily-task-list">
+        {% for task in daily_tasks %}
+        <div class="task-item" id="daily-task-{{ task.id }}">
+            <label class="task-check">
+                <input type="checkbox" {% if task.completed %}checked{% endif %}
+                       onchange="toggleDailyTask({{ task.id }}, this.checked)">
+                <span class="task-label {% if task.completed %}task-done{% endif %}">{{ task.title }}</span>
+            </label>
+            <button class="task-delete" onclick="deleteDailyTask({{ task.id }})" title="Verwijder">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/api/daily-tasks" class="task-add-form">
+        <input type="hidden" name="date" value="{{ today }}">
+        <input type="text" name="title" placeholder="Nieuwe taak toevoegen..." class="task-add-input">
+        <button type="submit" class="btn btn-small btn-secondary">+</button>
+    </form>
+</div>
+
+<!-- Trackers -->
+{% if trackers %}
+<div class="card">
+    <div class="card-header">
+        <h2>&#x1F4CA; Trackers</h2>
+        <a href="/trackers" class="btn btn-small btn-secondary">Beheer</a>
+    </div>
+
+    <div class="tracker-list">
+        {% for t in trackers %}
+        <div class="tracker-item">
+            <div class="tracker-info">
+                <span class="tracker-name">{{ t.name }}</span>
+                {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
+            </div>
+            {% if t.type == 'boolean' %}
+            <label class="task-check">
+                <input type="checkbox" form="checkin-form" name="tracker_{{ t.id }}" value="1"
+                       {% if t.value and t.value == 1.0 %}checked{% endif %}>
+                <span class="tracker-bool-label">&#x2713;</span>
+            </label>
+            {% else %}
+            <input type="number" form="checkin-form" name="tracker_{{ t.id }}"
+                   value="{{ t.value|int if t.value else '' }}"
+                   placeholder="0" class="tracker-input" step="any">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="highlight-box-blue" style="text-align: center;">
+    <p style="margin-bottom: 0.5rem;">Nog geen trackers ingesteld</p>
+    <a href="/trackers" class="btn btn-small btn-blue">Trackers configureren</a>
+</div>
+{% endif %}
+
+<!-- Check-in vragen -->
+<form method="POST" action="/api/checkin" id="checkin-form">
     {% for q in questions %}
     <div class="card">
         <div class="form-group">
@@ -36,6 +102,34 @@
     </div>
     {% endfor %}
 
+    <!-- Checked taken meesturen met het formulier -->
+    {% for task in daily_tasks %}
+    <input type="hidden" name="task_{{ task.id }}" value="1"
+           id="task-hidden-{{ task.id }}" {% if not task.completed %}disabled{% endif %}>
+    {% endfor %}
+
     <button type="submit" class="btn btn-primary">Check-in opslaan</button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function toggleDailyTask(taskId, checked) {
+    await fetch(`/api/daily-tasks/${taskId}/toggle`, { method: 'POST' });
+    const label = document.querySelector(`#daily-task-${taskId} .task-label`);
+    const hidden = document.getElementById(`task-hidden-${taskId}`);
+    if (checked) {
+        label.classList.add('task-done');
+        if (hidden) hidden.disabled = false;
+    } else {
+        label.classList.remove('task-done');
+        if (hidden) hidden.disabled = true;
+    }
+}
+
+async function deleteDailyTask(taskId) {
+    await fetch(`/api/daily-tasks/${taskId}`, { method: 'DELETE' });
+    document.getElementById(`daily-task-${taskId}`).remove();
+}
+</script>
 {% endblock %}

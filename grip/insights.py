@@ -72,9 +72,9 @@ async def _build_context(db: aiosqlite.Connection, days: int = 30) -> str:
             if r["priorities_next_week"]:
                 parts.append(f"- Prioriteiten: {r['priorities_next_week']}")
 
-    # Actieve doelen
+    # Actieve doelen met taken
     cursor = await db.execute(
-        "SELECT title, description, type, quarter, year FROM goals WHERE status = 'active' ORDER BY type, year, quarter"
+        "SELECT id, title, description, type, quarter, year FROM goals WHERE status = 'active' ORDER BY type, year, quarter"
     )
     goals = await cursor.fetchall()
 
@@ -87,6 +87,38 @@ async def _build_context(db: aiosqlite.Connection, days: int = 30) -> str:
             parts.append(f"- [{label}] {g['title']}")
             if g["description"]:
                 parts.append(f"  {g['description']}")
+            # Taken bij doel
+            cursor = await db.execute(
+                "SELECT title, completed FROM goal_tasks WHERE goal_id = ? ORDER BY sort_order",
+                (g["id"],),
+            )
+            tasks = await cursor.fetchall()
+            for t in tasks:
+                status = "x" if t["completed"] else " "
+                parts.append(f"  [{status}] {t['title']}")
+
+    # Tracker data
+    cursor = await db.execute(
+        """
+        SELECT t.name, t.unit, te.date, te.value
+        FROM tracker_entries te
+        JOIN trackers t ON te.tracker_id = t.id
+        WHERE te.date >= ?
+        ORDER BY t.name, te.date DESC
+        """,
+        (since,),
+    )
+    tracker_rows = await cursor.fetchall()
+
+    if tracker_rows:
+        parts.append("\n## Tracker data")
+        current_tracker = None
+        for r in tracker_rows:
+            name = f"{r['name']}" + (f" ({r['unit']})" if r["unit"] else "")
+            if name != current_tracker:
+                current_tracker = name
+                parts.append(f"\n### {name}")
+            parts.append(f"- {r['date']}: {r['value']}")
 
     return "\n".join(parts) if parts else "Nog geen data beschikbaar."
 

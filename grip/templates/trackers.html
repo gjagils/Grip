@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set active_nav = "checkin" %}
+
+{% block title %}Trackers — Grip{% endblock %}
+
+{% block content %}
+<h1><span class="doodle-underline">Trackers</span></h1>
+<div class="page-accent page-accent-blue"></div>
+<p style="color: var(--text-muted); margin-bottom: 1.5rem;">Configureer wat je dagelijks wilt bijhouden. Trackers verschijnen in je check-in.</p>
+
+{% if trackers %}
+<div class="card">
+    {% for t in trackers %}
+    <div class="tracker-config-item" id="tracker-{{ t.id }}">
+        <div class="tracker-config-info">
+            <span class="tracker-name">{{ t.name }}</span>
+            {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
+            <span class="badge {% if t.active %}badge-done{% else %}badge-pending{% endif %}" style="margin-left: 0.5rem;">
+                {{ 'actief' if t.active else 'gepauzeerd' }}
+            </span>
+        </div>
+        <div style="display: flex; gap: 0.25rem;">
+            <button class="btn btn-small btn-secondary" onclick="toggleTracker({{ t.id }})">
+                {{ 'Pauzeer' if t.active else 'Activeer' }}
+            </button>
+            <button class="btn btn-small btn-danger" onclick="deleteTracker({{ t.id }})">&#x1F5D1;</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Nieuwe tracker</h2>
+    <form method="POST" action="/api/trackers">
+        <div class="form-group">
+            <label>Naam</label>
+            <input type="text" name="name" required placeholder="Bijv. E-mails beantwoord">
+        </div>
+        <div class="form-group">
+            <label>Eenheid (optioneel)</label>
+            <input type="text" name="unit" placeholder="Bijv. stuks, uren, minuten">
+        </div>
+        <div class="form-group">
+            <label>Type</label>
+            <select name="type">
+                <option value="number">Getal (aantal invoeren)</option>
+                <option value="boolean">Ja/nee (checkbox)</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Tracker toevoegen</button>
+    </form>
+</div>
+
+<div class="highlight-box" style="margin-top: 1rem;">
+    <p style="font-weight: 600;">Voorbeelden van trackers:</p>
+    <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-size: 0.9rem;">
+        <li>E-mails beantwoord (stuks)</li>
+        <li>Uren non-overleg</li>
+        <li>Taken afgerond (stuks)</li>
+        <li>Minuten bewogen</li>
+        <li>Gemediteerd (ja/nee)</li>
+        <li>Glazen water</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function toggleTracker(trackerId) {
+    await fetch(`/api/trackers/${trackerId}/toggle`, { method: 'POST' });
+    location.reload();
+}
+
+async function deleteTracker(trackerId) {
+    if (!confirm('Tracker verwijderen? Alle bijbehorende data wordt ook verwijderd.')) return;
+    await fetch(`/api/trackers/${trackerId}`, { method: 'DELETE' });
+    document.getElementById(`tracker-${trackerId}`).remove();
+}
+</script>
+{% endblock %}

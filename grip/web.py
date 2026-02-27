@@ -103,21 +103,40 @@ async def checkin_page(request: Request):
     db = await get_db()
     try:
         today = date.today()
+        today_str = today.isoformat()
         questions = await get_daily_questions(db, today)
 
         # Check of er al een check-in is voor vandaag
         cursor = await db.execute(
-            "SELECT id FROM check_ins WHERE date = ?", (today.isoformat(),)
+            "SELECT id FROM check_ins WHERE date = ?", (today_str,)
         )
         existing = await cursor.fetchone()
+
+        # Dagelijkse taken voor vandaag
+        cursor = await db.execute(
+            "SELECT id, title, completed FROM daily_tasks WHERE date = ? ORDER BY created_at",
+            (today_str,),
+        )
+        daily_tasks = [dict(r) for r in await cursor.fetchall()]
+
+        # Actieve trackers
+        cursor = await db.execute(
+            "SELECT t.id, t.name, t.unit, t.type, te.value FROM trackers t "
+            "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
+            "WHERE t.active = 1 ORDER BY t.sort_order, t.id",
+            (today_str,),
+        )
+        trackers = [dict(r) for r in await cursor.fetchall()]
 
         return templates.TemplateResponse(
             "checkin.html",
             {
                 "request": request,
                 "questions": questions,
-                "today": today.isoformat(),
+                "today": today_str,
                 "already_done": existing is not None,
+                "daily_tasks": daily_tasks,
+                "trackers": trackers,
             },
         )
     finally:
@@ -163,6 +182,27 @@ async def save_checkin(request: Request):
                     "INSERT INTO check_in_answers (check_in_id, question_id, answer_text) VALUES (?, ?, ?)",
                     (checkin_id, question_id, value),
                 )
+
+        # Dagelijkse taken bijwerken
+        for key, value in form.items():
+            if key.startswith("task_"):
+                task_id = int(key.split("_")[1])
+                await db.execute(
+                    "UPDATE daily_tasks SET completed = 1, check_in_id = ? WHERE id = ?",
+                    (checkin_id, task_id),
+                )
+
+        # Tracker entries opslaan
+        for key, value in form.items():
+            if not key.startswith("tracker_") or not value:
+                continue
+            tracker_id = int(key.split("_")[1])
+            await db.execute(
+                """INSERT INTO tracker_entries (tracker_id, date, value)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(tracker_id, date) DO UPDATE SET value = ?""",
+                (tracker_id, today, float(value), float(value)),
+            )
 
         # Markeer als compleet
         await db.execute(
@@ -358,6 +398,18 @@ async def goals_page(request: Request):
         quarterly = [g for g in all_goals if g["type"] == "quarterly" and g["status"] == "active"]
         archived = [g for g in all_goals if g["status"] != "active"]
 
+        # Taken per doel laden
+        active_ids = [g["id"] for g in yearly + quarterly]
+        goal_tasks: dict[int, list[dict]] = {gid: [] for gid in active_ids}
+        if active_ids:
+            placeholders = ",".join("?" * len(active_ids))
+            cursor = await db.execute(
+                f"SELECT * FROM goal_tasks WHERE goal_id IN ({placeholders}) ORDER BY sort_order, id",
+                active_ids,
+            )
+            for t in await cursor.fetchall():
+                goal_tasks[t["goal_id"]].append(dict(t))
+
         return templates.TemplateResponse(
             "goals.html",
             {
@@ -365,6 +417,7 @@ async def goals_page(request: Request):
                 "yearly_goals": yearly,
                 "quarterly_goals": quarterly,
                 "archived_goals": archived,
+                "goal_tasks": goal_tasks,
                 "current_year": year,
                 "current_quarter": quarter,
             },
@@ -429,6 +482,174 @@ async def add_goal_update(goal_id: int, request: Request):
         )
         await db.commit()
         return RedirectResponse("/goals", status_code=303)
+    finally:
+        await db.close()
+
+
+# --- Goal Tasks (taken bij doelen) ---
+
+
+@app.post("/api/goals/{goal_id}/tasks")
+async def add_goal_task(goal_id: int, request: Request):
+    db = await get_db()
+    try:
+        form = await request.form()
+        title = form.get("title", "").strip()
+        if not title:
+            return RedirectResponse("/goals", status_code=303)
+        # Bepaal sort_order
+        cursor = await db.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM goal_tasks WHERE goal_id = ?",
+            (goal_id,),
+        )
+        next_order = (await cursor.fetchone())[0]
+        await db.execute(
+            "INSERT INTO goal_tasks (goal_id, title, sort_order) VALUES (?, ?, ?)",
+            (goal_id, title, next_order),
+        )
+        await db.commit()
+        return RedirectResponse("/goals", status_code=303)
+    finally:
+        await db.close()
+
+
+@app.post("/api/goal-tasks/{task_id}/toggle")
+async def toggle_goal_task(task_id: int):
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE goal_tasks SET completed = CASE WHEN completed = 0 THEN 1 ELSE 0 END WHERE id = ?",
+            (task_id,),
+        )
+        await db.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        await db.close()
+
+
+@app.delete("/api/goal-tasks/{task_id}")
+async def delete_goal_task(task_id: int):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM goal_tasks WHERE id = ?", (task_id,))
+        await db.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        await db.close()
+
+
+# --- Daily Tasks (taken bij check-in) ---
+
+
+@app.post("/api/daily-tasks")
+async def add_daily_task(request: Request):
+    db = await get_db()
+    try:
+        form = await request.form()
+        title = form.get("title", "").strip()
+        task_date = form.get("date", date.today().isoformat())
+        if not title:
+            return RedirectResponse("/checkin", status_code=303)
+        await db.execute(
+            "INSERT INTO daily_tasks (title, date) VALUES (?, ?)",
+            (title, task_date),
+        )
+        await db.commit()
+        return RedirectResponse("/checkin", status_code=303)
+    finally:
+        await db.close()
+
+
+@app.post("/api/daily-tasks/{task_id}/toggle")
+async def toggle_daily_task(task_id: int):
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE daily_tasks SET completed = CASE WHEN completed = 0 THEN 1 ELSE 0 END WHERE id = ?",
+            (task_id,),
+        )
+        await db.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        await db.close()
+
+
+@app.delete("/api/daily-tasks/{task_id}")
+async def delete_daily_task(task_id: int):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM daily_tasks WHERE id = ?", (task_id,))
+        await db.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        await db.close()
+
+
+# --- Trackers (configureerbare dagelijkse metrieken) ---
+
+
+@app.get("/trackers", response_class=HTMLResponse)
+async def trackers_page(request: Request):
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM trackers ORDER BY sort_order, id")
+        all_trackers = [dict(r) for r in await cursor.fetchall()]
+
+        return templates.TemplateResponse(
+            "trackers.html",
+            {"request": request, "trackers": all_trackers},
+        )
+    finally:
+        await db.close()
+
+
+@app.post("/api/trackers")
+async def create_tracker(request: Request):
+    db = await get_db()
+    try:
+        form = await request.form()
+        name = form.get("name", "").strip()
+        unit = form.get("unit", "").strip()
+        tracker_type = form.get("type", "number")
+        if not name:
+            return RedirectResponse("/trackers", status_code=303)
+
+        cursor = await db.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM trackers"
+        )
+        next_order = (await cursor.fetchone())[0]
+
+        await db.execute(
+            "INSERT INTO trackers (name, unit, type, sort_order) VALUES (?, ?, ?, ?)",
+            (name, unit, tracker_type, next_order),
+        )
+        await db.commit()
+        return RedirectResponse("/trackers", status_code=303)
+    finally:
+        await db.close()
+
+
+@app.post("/api/trackers/{tracker_id}/toggle")
+async def toggle_tracker(tracker_id: int):
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE trackers SET active = CASE WHEN active = 0 THEN 1 ELSE 0 END WHERE id = ?",
+            (tracker_id,),
+        )
+        await db.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        await db.close()
+
+
+@app.delete("/api/trackers/{tracker_id}")
+async def delete_tracker(tracker_id: int):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM trackers WHERE id = ?", (tracker_id,))
+        await db.commit()
+        return JSONResponse({"ok": True})
     finally:
         await db.close()
 

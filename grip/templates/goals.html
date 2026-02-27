@@ -4,55 +4,83 @@
 {% block title %}Doelen — Grip{% endblock %}
 
 {% block content %}
-<h1>Doelen</h1>
+<h1><span class="doodle-underline">Doelen</span></h1>
+<div class="page-accent page-accent-orange"></div>
 
 <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
     <button class="btn btn-primary btn-small" onclick="openModal('goal-modal')">+ Nieuw doel</button>
 </div>
 
-{% if yearly_goals %}
-<h2>Jaardoelen {{ current_year }}</h2>
-{% for goal in yearly_goals %}
+{% macro goal_card(goal) %}
 <div class="card">
     <div class="goal-item">
-        <div>
+        <div style="flex: 1;">
             <div class="goal-title">{{ goal.title }}</div>
             {% if goal.description %}
             <div class="goal-meta">{{ goal.description }}</div>
             {% endif %}
+            {% if goal.type == 'quarterly' %}
+            <div class="goal-meta">{{ goal.quarter }} {{ goal.year }}</div>
+            {% endif %}
         </div>
         <div style="display: flex; gap: 0.25rem;">
-            <button class="btn btn-small btn-success" onclick="updateGoalStatus({{ goal.id }}, 'completed')">&#x2713;</button>
+            <button class="btn btn-small btn-success" onclick="updateGoalStatus({{ goal.id }}, 'completed')" title="Afronden">&#x2713;</button>
         </div>
     </div>
+
+    <!-- Taken bij dit doel -->
+    {% set tasks = goal_tasks.get(goal.id, []) %}
+    {% if tasks %}
+    <div class="task-list" style="margin-top: 0.5rem; border-top: 1.5px dashed var(--border); padding-top: 0.5rem;">
+        {% for task in tasks %}
+        <div class="task-item" id="goal-task-{{ task.id }}">
+            <label class="task-check">
+                <input type="checkbox" {% if task.completed %}checked{% endif %}
+                       onchange="toggleGoalTask({{ task.id }})">
+                <span class="task-label {% if task.completed %}task-done{% endif %}">{{ task.title }}</span>
+            </label>
+            <button class="task-delete" onclick="deleteGoalTask({{ task.id }})" title="Verwijder">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Taak toevoegen -->
+    <form method="POST" action="/api/goals/{{ goal.id }}/tasks" class="task-add-form" style="margin-top: 0.5rem;">
+        <input type="text" name="title" placeholder="Taak toevoegen..." class="task-add-input">
+        <button type="submit" class="btn btn-small btn-secondary">+</button>
+    </form>
+
+    {% if tasks %}
+    <div class="task-progress" style="margin-top: 0.5rem;">
+        {% set done = tasks|selectattr('completed')|list|length %}
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ (done / tasks|length * 100)|int }}%"></div>
+        </div>
+        <span class="task-progress-text">{{ done }}/{{ tasks|length }} taken</span>
+    </div>
+    {% endif %}
 </div>
+{% endmacro %}
+
+{% if yearly_goals %}
+<h2>&#x2B50; Jaardoelen {{ current_year }}</h2>
+{% for goal in yearly_goals %}
+{{ goal_card(goal) }}
 {% endfor %}
 {% endif %}
 
 {% if quarterly_goals %}
-<h2>Kwartaaldoelen {{ current_quarter }} {{ current_year }}</h2>
+<h2>&#x1F3AF; Kwartaaldoelen {{ current_quarter }} {{ current_year }}</h2>
 {% for goal in quarterly_goals %}
-<div class="card">
-    <div class="goal-item">
-        <div>
-            <div class="goal-title">{{ goal.title }}</div>
-            {% if goal.description %}
-            <div class="goal-meta">{{ goal.description }}</div>
-            {% endif %}
-            <div class="goal-meta">{{ goal.quarter }} {{ goal.year }}</div>
-        </div>
-        <div style="display: flex; gap: 0.25rem;">
-            <button class="btn btn-small btn-success" onclick="updateGoalStatus({{ goal.id }}, 'completed')">&#x2713;</button>
-        </div>
-    </div>
-</div>
+{{ goal_card(goal) }}
 {% endfor %}
 {% endif %}
 
 {% if not yearly_goals and not quarterly_goals %}
-<div class="card">
+<div class="card card-doodle">
     <div class="empty-state">
-        <p>Nog geen actieve doelen.</p>
+        <p>Nog geen actieve doelen</p>
         <p style="margin-top: 0.5rem; font-size: 0.9rem;">Stel je jaar- en kwartaaldoelen in om focus te houden.</p>
     </div>
 </div>
@@ -60,7 +88,7 @@
 
 {% if archived_goals %}
 <details style="margin-top: 1.5rem;">
-    <summary style="color: var(--text-muted); cursor: pointer;">Afgeronde & verlaten doelen ({{ archived_goals|length }})</summary>
+    <summary>Afgeronde & verlaten doelen ({{ archived_goals|length }})</summary>
     {% for goal in archived_goals %}
     <div class="card" style="margin-top: 0.5rem; opacity: 0.6;">
         <div class="goal-title">{{ goal.title }}</div>
@@ -123,6 +151,17 @@ async function updateGoalStatus(goalId, status) {
         body: JSON.stringify({ status })
     });
     location.reload();
+}
+
+async function toggleGoalTask(taskId) {
+    await fetch(`/api/goal-tasks/${taskId}/toggle`, { method: 'POST' });
+    const label = document.querySelector(`#goal-task-${taskId} .task-label`);
+    label.classList.toggle('task-done');
+}
+
+async function deleteGoalTask(taskId) {
+    await fetch(`/api/goal-tasks/${taskId}`, { method: 'DELETE' });
+    document.getElementById(`goal-task-${taskId}`).remove();
 }
 </script>
 {% endblock %}
