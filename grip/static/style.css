@@ -605,3 +605,173 @@ details summary:hover {
 .page-accent-blue {
     background: linear-gradient(90deg, var(--blue), var(--blue-medium), transparent);
 }
+
+/* Task items — used in goals and daily check-in */
+.task-list {
+    margin-bottom: 0.5rem;
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    border-bottom: 1px dashed var(--border);
+}
+
+.task-item:last-child {
+    border-bottom: none;
+}
+
+.task-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    flex: 1;
+}
+
+.task-check input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--orange);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.task-label {
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.task-done {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.task-delete {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.task-delete:hover {
+    opacity: 1;
+    color: var(--danger);
+}
+
+/* Task add form — inline */
+.task-add-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.task-add-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.9rem !important;
+}
+
+/* Progress bar — used for goal task completion */
+.task-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--orange);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.task-progress-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Tracker items — in check-in page */
+.tracker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tracker-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--border);
+}
+
+.tracker-item:last-child {
+    border-bottom: none;
+}
+
+.tracker-info {
+    flex: 1;
+}
+
+.tracker-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tracker-unit {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.tracker-input {
+    width: 80px !important;
+    text-align: center;
+    padding: 0.5rem !important;
+    font-size: 1rem !important;
+    font-weight: 600;
+}
+
+.tracker-bool-label {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--success);
+}
+
+/* Tracker config page */
+.tracker-config-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1.5px dashed var(--border);
+}
+
+.tracker-config-item:last-child {
+    border-bottom: none;
+}
+
+.tracker-config-info {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
