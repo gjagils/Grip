@@ -1,0 +1,607 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg: #faf8f5;
+    --surface: #ffffff;
+    --surface-2: #f3f0eb;
+    --border: #e0dbd3;
+    --border-sketch: #c9c3b8;
+    --text: #2d2a26;
+    --text-muted: #8a8478;
+    --orange: #e86830;
+    --orange-soft: #e8683015;
+    --orange-medium: #e8683030;
+    --blue: #5ba4d9;
+    --blue-soft: #5ba4d915;
+    --blue-medium: #5ba4d930;
+    --success: #5cb85c;
+    --success-soft: #5cb85c18;
+    --danger: #d9534f;
+    --handwritten: 'Caveat', cursive;
+    --body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--body);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 1.25rem;
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+/* Navigation */
+nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 2px solid var(--border);
+    display: flex;
+    justify-content: space-around;
+    padding: 0.5rem 0;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    z-index: 100;
+}
+
+nav a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.25rem 0.75rem;
+    transition: color 0.2s;
+}
+
+nav a.active {
+    color: var(--orange);
+}
+
+nav a:hover {
+    color: var(--orange);
+}
+
+nav a svg {
+    width: 22px;
+    height: 22px;
+}
+
+/* Headers — hand-drawn feel */
+h1 {
+    font-family: var(--handwritten);
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.5px;
+}
+
+h2 {
+    font-family: var(--handwritten);
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+}
+
+h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+/* Doodle underline for headings */
+.doodle-underline {
+    position: relative;
+    display: inline-block;
+}
+
+.doodle-underline::after {
+    content: '';
+    position: absolute;
+    left: -4px;
+    right: -4px;
+    bottom: 2px;
+    height: 8px;
+    background: var(--orange-medium);
+    border-radius: 4px;
+    z-index: -1;
+    transform: rotate(-0.5deg);
+}
+
+/* Cards — sketchy border style */
+.card {
+    background: var(--surface);
+    border: 2px solid var(--border-sketch);
+    border-radius: 16px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    position: relative;
+    box-shadow: 2px 3px 0 var(--border);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+/* Doodle card variant — hand-drawn border */
+.card-doodle {
+    border-style: solid;
+    border-width: 2px;
+    border-color: var(--border-sketch);
+    border-radius: 20px 16px 22px 14px;
+    box-shadow: 3px 4px 0 var(--border);
+}
+
+/* Status badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.badge-done {
+    background: var(--success-soft);
+    color: var(--success);
+    border: 1.5px solid var(--success);
+}
+
+.badge-pending {
+    background: var(--orange-soft);
+    color: var(--orange);
+    border: 1.5px solid var(--orange);
+}
+
+/* Streak */
+.streak {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--handwritten);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--orange);
+}
+
+.streak-fire {
+    font-size: 1.5rem;
+}
+
+/* Doodle decorations */
+.doodle-star {
+    display: inline-block;
+    color: var(--orange);
+    font-size: 1.2rem;
+    animation: wiggle 3s ease-in-out infinite;
+}
+
+@keyframes wiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(5deg); }
+    75% { transform: rotate(-5deg); }
+}
+
+/* Section divider — hand-drawn squiggle */
+.squiggle-divider {
+    text-align: center;
+    margin: 1.5rem 0;
+    color: var(--border-sketch);
+    font-size: 1.5rem;
+    letter-spacing: 0.5rem;
+}
+
+/* Forms */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    color: var(--text);
+}
+
+textarea,
+input[type="text"],
+input[type="number"],
+select {
+    width: 100%;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+/* Score slider */
+.score-input {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.score-input input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    padding: 0;
+}
+
+.score-input input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px;
+    height: 28px;
+    background: var(--orange);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 3px solid var(--surface);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.score-value {
+    font-family: var(--handwritten);
+    font-size: 2rem;
+    font-weight: 700;
+    min-width: 2.5rem;
+    text-align: center;
+    color: var(--orange);
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-primary {
+    background: var(--orange);
+    color: white;
+    width: 100%;
+    border-color: var(--orange);
+    box-shadow: 2px 3px 0 #c4561f;
+}
+
+.btn-primary:hover {
+    background: #d55e28;
+}
+
+.btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 2px solid var(--border-sketch);
+    box-shadow: 2px 3px 0 var(--border);
+}
+
+.btn-secondary:hover {
+    border-color: var(--blue);
+}
+
+.btn-small {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.85rem;
+    box-shadow: 1px 2px 0 var(--border);
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+}
+
+.btn-blue {
+    background: var(--blue);
+    color: white;
+    border-color: var(--blue);
+    box-shadow: 2px 3px 0 #4889b8;
+}
+
+/* Goal items */
+.goal-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 0.75rem 0;
+    border-bottom: 1.5px dashed var(--border);
+}
+
+.goal-item:last-child {
+    border-bottom: none;
+}
+
+.goal-title {
+    font-weight: 600;
+}
+
+.goal-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* History entries */
+.history-date {
+    font-family: var(--handwritten);
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: var(--orange);
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 2px dashed var(--border);
+}
+
+.history-entry {
+    padding: 0.3rem 0;
+    font-size: 0.9rem;
+}
+
+.history-entry strong {
+    color: var(--text-muted);
+}
+
+/* Insights chat */
+.insight-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.insight-form input {
+    flex: 1;
+}
+
+.insight-response {
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    margin-bottom: 0;
+    white-space: pre-wrap;
+    line-height: 1.7;
+}
+
+.insight-prompt {
+    font-family: var(--handwritten);
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: var(--blue);
+    margin-bottom: 0.5rem;
+}
+
+.insight-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+/* Loading */
+.loading {
+    display: none;
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-family: var(--handwritten);
+    font-size: 1.3rem;
+}
+
+.loading.active {
+    display: block;
+}
+
+/* Modal */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(45, 42, 38, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    border-top: 3px solid var(--orange);
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 600px;
+    max-height: 80dvh;
+    overflow-y: auto;
+}
+
+.modal h2 {
+    margin-bottom: 1rem;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+}
+
+.empty-state p:first-child {
+    font-family: var(--handwritten);
+    font-size: 1.4rem;
+    color: var(--text);
+}
+
+/* Quick actions on dashboard */
+.quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.quick-action {
+    background: var(--surface);
+    border: 2px solid var(--border-sketch);
+    border-radius: 14px;
+    padding: 1.25rem 1rem;
+    text-decoration: none;
+    color: var(--text);
+    text-align: center;
+    transition: all 0.2s;
+    box-shadow: 2px 3px 0 var(--border);
+}
+
+.quick-action:hover {
+    border-color: var(--orange);
+    transform: translateY(-1px);
+    box-shadow: 3px 4px 0 var(--border);
+}
+
+.quick-action-icon {
+    font-size: 1.8rem;
+    margin-bottom: 0.4rem;
+}
+
+.quick-action-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* Doodle arrow decoration — use as background on specific sections */
+.doodle-arrow::before {
+    content: '\2192';
+    font-size: 1.5rem;
+    color: var(--orange);
+    margin-right: 0.5rem;
+}
+
+/* Highlight box — for tips or callouts */
+.highlight-box {
+    background: var(--orange-soft);
+    border: 2px dashed var(--orange);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.highlight-box-blue {
+    background: var(--blue-soft);
+    border: 2px dashed var(--blue);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Details/summary */
+details summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 0.5rem 0;
+}
+
+details summary:hover {
+    color: var(--text);
+}
+
+/* Hand-drawn circle around numbers/scores */
+.circle-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 3px solid var(--orange);
+    border-radius: 50%;
+    font-family: var(--handwritten);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--orange);
+}
+
+/* Page-specific accent bars */
+.page-accent {
+    height: 4px;
+    border-radius: 2px;
+    margin-bottom: 1.25rem;
+}
+
+.page-accent-orange {
+    background: linear-gradient(90deg, var(--orange), var(--orange-medium), transparent);
+}
+
+.page-accent-blue {
+    background: linear-gradient(90deg, var(--blue), var(--blue-medium), transparent);
+}

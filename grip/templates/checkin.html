@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set active_nav = "checkin" %}
+
+{% block title %}Check-in — Grip{% endblock %}
+
+{% block content %}
+<h1><span class="doodle-underline">Dagelijkse check-in</span></h1>
+<div class="page-accent page-accent-orange"></div>
+<p style="color: var(--text-muted); margin-bottom: 1.5rem; font-style: italic;">{{ today }}</p>
+
+{% if already_done %}
+<div class="card">
+    <span class="badge badge-done">&#x2713; Al ingevuld vandaag</span>
+    <p style="margin-top: 0.75rem; color: var(--text-muted);">Je kunt je antwoorden bijwerken door het formulier opnieuw in te vullen.</p>
+</div>
+{% endif %}
+
+<form method="POST" action="/api/checkin">
+    {% for q in questions %}
+    <div class="card">
+        <div class="form-group">
+            <label>{{ q.text }}</label>
+
+            {% if q.type == "score" %}
+            <input type="hidden" name="type_{{ q.id }}" value="score">
+            <div class="score-input">
+                <input type="range" name="q_{{ q.id }}" min="1" max="10" value="5"
+                       oninput="this.parentElement.querySelector('.score-value').textContent = this.value">
+                <span class="score-value">5</span>
+            </div>
+            {% else %}
+            <input type="hidden" name="type_{{ q.id }}" value="open">
+            <textarea name="q_{{ q.id }}" placeholder="Je antwoord..." rows="3"></textarea>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary">Check-in opslaan</button>
+</form>
+{% endblock %}

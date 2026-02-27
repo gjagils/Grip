@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set active_nav = "dashboard" %}
+
+{% block title %}Weekreview — Grip{% endblock %}
+
+{% block content %}
+<h1>Weekreview</h1>
+<p style="color: var(--text-muted); margin-bottom: 1.5rem;">Week {{ week }}, {{ year }}</p>
+
+{% if existing %}
+<div class="card">
+    <span class="badge badge-done">&#x2713; Al ingevuld deze week</span>
+    <p style="margin-top: 0.75rem; color: var(--text-muted);">Je kunt je review bijwerken.</p>
+</div>
+{% endif %}
+
+<form method="POST" action="/api/weekreview">
+    <div class="card">
+        <div class="form-group">
+            <label>Hoe was je week overall?</label>
+            <div class="score-input">
+                <input type="range" name="score" min="1" max="10" value="{{ existing.score or 5 }}"
+                       oninput="this.parentElement.querySelector('.score-value').textContent = this.value">
+                <span class="score-value">{{ existing.score or 5 }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Wat ging er goed deze week?</label>
+            <textarea name="went_well" rows="4" placeholder="Successen, hoogtepunten...">{{ existing.went_well or '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Wat kan er beter volgende week?</label>
+            <textarea name="improve" rows="4" placeholder="Verbeterpunten, lessen...">{{ existing.improve or '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Ben je op koers met je kwartaaldoelen?</label>
+            <div class="score-input">
+                <input type="range" name="on_track_goals" min="1" max="10" value="{{ existing.on_track_goals or 5 }}"
+                       oninput="this.parentElement.querySelector('.score-value').textContent = this.value">
+                <span class="score-value">{{ existing.on_track_goals or 5 }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Wat zijn je top 3 prioriteiten voor volgende week?</label>
+            <textarea name="priorities_next_week" rows="4" placeholder="1. &#10;2. &#10;3. ">{{ existing.priorities_next_week or '' }}</textarea>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Weekreview opslaan</button>
+</form>
+{% endblock %}
