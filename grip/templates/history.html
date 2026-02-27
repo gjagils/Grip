@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set active_nav = "checkin" %}
+
+{% block title %}Geschiedenis — Grip{% endblock %}
+
+{% block content %}
+<h1>Check-in geschiedenis</h1>
+
+{% if history %}
+{% for date, answers in history.items() %}
+<div class="history-date">{{ date }}</div>
+{% for a in answers %}
+<div class="history-entry">
+    <strong>{{ a.text }}:</strong>
+    {% if a.type == 'score' %}
+        {{ a.answer_score }}/10
+    {% else %}
+        {{ a.answer_text }}
+    {% endif %}
+</div>
+{% endfor %}
+{% endfor %}
+{% else %}
+<div class="empty-state">
+    <p>Nog geen check-ins gedaan.</p>
+    <a href="/checkin" class="btn btn-small btn-primary" style="margin-top: 0.75rem; display: inline-flex;">Eerste check-in</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% set active_nav = "goals" %}
+
+{% block title %}Doelen — Grip{% endblock %}
+
+{% block content %}
+<h1>Doelen</h1>
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+    <button class="btn btn-primary btn-small" onclick="openModal('goal-modal')">+ Nieuw doel</button>
+</div>
+
+{% if yearly_goals %}
+<h2>Jaardoelen {{ current_year }}</h2>
+{% for goal in yearly_goals %}
+<div class="card">
+    <div class="goal-item">
+        <div>
+            <div class="goal-title">{{ goal.title }}</div>
+            {% if goal.description %}
+            <div class="goal-meta">{{ goal.description }}</div>
+            {% endif %}
+        </div>
+        <div style="display: flex; gap: 0.25rem;">
+            <button class="btn btn-small btn-success" onclick="updateGoalStatus({{ goal.id }}, 'completed')">&#x2713;</button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if quarterly_goals %}
+<h2>Kwartaaldoelen {{ current_quarter }} {{ current_year }}</h2>
+{% for goal in quarterly_goals %}
+<div class="card">
+    <div class="goal-item">
+        <div>
+            <div class="goal-title">{{ goal.title }}</div>
+            {% if goal.description %}
+            <div class="goal-meta">{{ goal.description }}</div>
+            {% endif %}
+            <div class="goal-meta">{{ goal.quarter }} {{ goal.year }}</div>
+        </div>
+        <div style="display: flex; gap: 0.25rem;">
+            <button class="btn btn-small btn-success" onclick="updateGoalStatus({{ goal.id }}, 'completed')">&#x2713;</button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if not yearly_goals and not quarterly_goals %}
+<div class="card">
+    <div class="empty-state">
+        <p>Nog geen actieve doelen.</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem;">Stel je jaar- en kwartaaldoelen in om focus te houden.</p>
+    </div>
+</div>
+{% endif %}
+
+{% if archived_goals %}
+<details style="margin-top: 1.5rem;">
+    <summary style="color: var(--text-muted); cursor: pointer;">Afgeronde & verlaten doelen ({{ archived_goals|length }})</summary>
+    {% for goal in archived_goals %}
+    <div class="card" style="margin-top: 0.5rem; opacity: 0.6;">
+        <div class="goal-title">{{ goal.title }}</div>
+        <div class="goal-meta">{{ goal.type }} {{ goal.year }}{% if goal.quarter %} {{ goal.quarter }}{% endif %} — {{ goal.status }}</div>
+    </div>
+    {% endfor %}
+</details>
+{% endif %}
+
+<!-- Modal: Nieuw doel -->
+<div class="modal-overlay" id="goal-modal" onclick="if(event.target===this)closeModal('goal-modal')">
+    <div class="modal">
+        <h2>Nieuw doel</h2>
+        <form method="POST" action="/api/goals">
+            <div class="form-group">
+                <label>Titel</label>
+                <input type="text" name="title" required placeholder="Wat wil je bereiken?">
+            </div>
+            <div class="form-group">
+                <label>Beschrijving (optioneel)</label>
+                <textarea name="description" rows="3" placeholder="Meer context..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select name="type" onchange="document.getElementById('quarter-field').style.display = this.value === 'quarterly' ? 'block' : 'none'">
+                    <option value="yearly">Jaardoel</option>
+                    <option value="quarterly">Kwartaaldoel</option>
+                </select>
+            </div>
+            <div class="form-group" id="quarter-field" style="display: none;">
+                <label>Kwartaal</label>
+                <select name="quarter">
+                    <option value="Q1">Q1 (jan-mrt)</option>
+                    <option value="Q2">Q2 (apr-jun)</option>
+                    <option value="Q3">Q3 (jul-sep)</option>
+                    <option value="Q4">Q4 (okt-dec)</option>
+                </select>
+            </div>
+            <input type="hidden" name="year" value="{{ current_year }}">
+            <button type="submit" class="btn btn-primary">Doel opslaan</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) {
+    document.getElementById(id).classList.add('active');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+}
+
+async function updateGoalStatus(goalId, status) {
+    await fetch(`/api/goals/${goalId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+    });
+    location.reload();
+}
+</script>
+{% endblock %}

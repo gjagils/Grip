@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#faf8f5">
+    <title>Focus — Grip</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            background: var(--bg);
+            min-width: 200px;
+        }
+        .focus-container {
+            padding: 0.75rem;
+            max-width: 100%;
+        }
+        .focus-title {
+            font-family: var(--handwritten);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--orange);
+            margin-bottom: 0.5rem;
+            border-bottom: 2px dashed var(--border);
+            padding-bottom: 0.25rem;
+        }
+        .focus-section {
+            margin-bottom: 1rem;
+        }
+        .focus-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+        .focus-item {
+            font-size: 0.85rem;
+            padding: 0.3rem 0;
+            border-bottom: 1px dashed var(--border);
+            line-height: 1.4;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.4rem;
+        }
+        .focus-item:last-child {
+            border-bottom: none;
+        }
+        .focus-bullet {
+            color: var(--orange);
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .focus-bullet-blue {
+            color: var(--blue);
+        }
+        .focus-priorities {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            color: var(--text);
+        }
+        .focus-empty {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+        .focus-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 1rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .focus-meta a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="focus-container">
+        <div class="focus-title">&#x1F3AF; Week {{ week }}</div>
+
+        <div class="focus-section">
+            <div class="focus-label">Weekprioriteiten</div>
+            {% if priorities %}
+            <div class="focus-priorities">{{ priorities }}</div>
+            {% else %}
+            <div class="focus-empty">Nog geen prioriteiten ingesteld. Doe je weekreview!</div>
+            {% endif %}
+        </div>
+
+        {% if quarterly_goals %}
+        <div class="focus-section">
+            <div class="focus-label">{{ quarter }} Doelen</div>
+            {% for goal in quarterly_goals %}
+            <div class="focus-item">
+                <span class="focus-bullet">&#x25CF;</span>
+                <span>{{ goal.title }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if yearly_goals %}
+        <div class="focus-section">
+            <div class="focus-label">Jaardoelen {{ year }}</div>
+            {% for goal in yearly_goals %}
+            <div class="focus-item">
+                <span class="focus-bullet focus-bullet-blue">&#x25CB;</span>
+                <span>{{ goal.title }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="focus-meta">
+            <a href="/">Open Grip</a>
+        </div>
+    </div>
+</body>
+</html>

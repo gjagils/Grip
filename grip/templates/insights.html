@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% set active_nav = "insights" %}
+
+{% block title %}Inzichten — Grip{% endblock %}
+
+{% block content %}
+<h1><span class="doodle-underline">Inzichten</span></h1>
+<div class="page-accent page-accent-blue"></div>
+<p style="color: var(--text-muted); margin-bottom: 1.5rem;">Stel een vraag over je check-ins, doelen en voortgang.</p>
+
+<div class="insight-form">
+    <input type="text" id="insight-question" placeholder="Bijv. Hoe gaat het met mijn energie deze week?"
+           onkeydown="if(event.key==='Enter')askInsight()">
+    <button class="btn btn-blue btn-small" onclick="askInsight()">Vraag</button>
+</div>
+
+<div class="loading" id="loading">Even denken...</div>
+
+<div id="insight-results">
+    {% for item in history %}
+    <div class="card">
+        <div class="insight-prompt">{{ item.prompt }}</div>
+        <div class="insight-response">{{ item.response }}</div>
+        <div class="insight-time">{{ item.created_at }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not history %}
+<div class="empty-state" id="empty-state">
+    <p>Nog geen inzichten.</p>
+    <p style="margin-top: 0.5rem; font-size: 0.9rem;">Stel een vraag en Claude analyseert je data.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function askInsight() {
+    const input = document.getElementById('insight-question');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('insight-results');
+    const empty = document.getElementById('empty-state');
+
+    loading.classList.add('active');
+    input.disabled = true;
+
+    try {
+        const res = await fetch('/api/insights/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="insight-prompt">${escapeHtml(question)}</div>
+            <div class="insight-response">${escapeHtml(data.response)}</div>
+            <div class="insight-time">Zojuist</div>
+        `;
+        results.prepend(card);
+        input.value = '';
+
+        if (empty) empty.remove();
+    } catch (err) {
+        alert('Er ging iets mis. Probeer het opnieuw.');
+    } finally {
+        loading.classList.remove('active');
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

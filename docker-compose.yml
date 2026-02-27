@@ -1,0 +1,14 @@
+services:
+  grip:
+    image: ghcr.io/gjagils/grip:latest
+    container_name: grip
+    restart: unless-stopped
+    ports:
+      - "8921:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - grip-data:/data
+
+volumes:
+  grip-data:

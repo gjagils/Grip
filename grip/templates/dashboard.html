@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_nav = "dashboard" %}
+
+{% block title %}Grip — Dashboard{% endblock %}
+
+{% block content %}
+<h1><span class="doodle-underline">Grip</span></h1>
+<div class="page-accent page-accent-orange"></div>
+
+{% if streak > 0 %}
+<div class="card card-doodle">
+    <div class="streak">
+        <span class="streak-fire">&#x1F525;</span>
+        <span>{{ streak }} dag{% if streak != 1 %}en{% endif %} streak!</span>
+    </div>
+</div>
+{% endif %}
+
+<div class="quick-actions">
+    <a href="/checkin" class="quick-action">
+        <div class="quick-action-icon">
+            {% if has_checkin %}&#x2705;{% else %}&#x270F;&#xFE0F;{% endif %}
+        </div>
+        <div class="quick-action-label">
+            {% if has_checkin %}Check-in gedaan{% else %}Check-in{% endif %}
+        </div>
+    </a>
+    <a href="/weekreview" class="quick-action">
+        <div class="quick-action-icon">
+            {% if has_week_review %}&#x2705;{% else %}&#x1F4CB;{% endif %}
+        </div>
+        <div class="quick-action-label">
+            {% if has_week_review %}Week {{ week }} gedaan{% else %}Weekreview{% endif %}
+        </div>
+    </a>
+</div>
+
+{% if goals %}
+<div class="card">
+    <div class="card-header">
+        <h2>&#x1F3AF; Actieve doelen</h2>
+        <a href="/goals" class="btn btn-small btn-secondary">Bekijk alle</a>
+    </div>
+    {% for goal in goals[:5] %}
+    <div class="goal-item">
+        <div>
+            <div class="goal-title">{{ goal.title }}</div>
+            <div class="goal-meta">
+                {{ goal.type }} {{ goal.year }}{% if goal.quarter %} {{ goal.quarter }}{% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card card-doodle">
+    <div class="empty-state">
+        <p>Nog geen doelen ingesteld</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem;">Begin met je jaar- en kwartaaldoelen!</p>
+        <a href="/goals" class="btn btn-small btn-primary" style="margin-top: 1rem; display: inline-flex;">Doelen toevoegen</a>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h2>&#x1F4C5; Geschiedenis</h2>
+    </div>
+    <a href="/checkin/history" class="btn btn-secondary btn-small" style="width: 100%;">Bekijk check-in geschiedenis</a>
+</div>
+{% endblock %}
