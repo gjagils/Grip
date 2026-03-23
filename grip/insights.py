@@ -1,5 +1,5 @@
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import aiosqlite
 from anthropic import AsyncAnthropic
@@ -140,3 +140,128 @@ async def ask(db: aiosqlite.Connection, question: str) -> str:
     )
 
     return response.content[0].text
+
+
+async def reflect_checkin(db: aiosqlite.Connection) -> str:
+    """Haiku reflectie op de check-in van vandaag."""
+    today = date.today().isoformat()
+    now = datetime.now()
+    year, week, _ = now.isocalendar()
+
+    cursor = await db.execute(
+        """
+        SELECT q.text, q.type, ca.answer_text, ca.answer_score
+        FROM check_in_answers ca
+        JOIN check_ins ci ON ca.check_in_id = ci.id
+        JOIN questions q ON ca.question_id = q.id
+        WHERE ci.date = ?
+        ORDER BY q.is_core DESC
+        """,
+        (today,),
+    )
+    rows = await cursor.fetchall()
+
+    parts = [f"## Check-in {today}"]
+    for r in rows:
+        answer = r["answer_score"] if r["type"] == "score" else r["answer_text"]
+        if answer is not None:
+            parts.append(f"- {r['text']}: {answer}")
+
+    cursor = await db.execute(
+        "SELECT title FROM goals WHERE type = 'weekly' AND status = 'active' AND year = ? AND week_number = ?",
+        (year, week),
+    )
+    goals = await cursor.fetchall()
+    if goals:
+        parts.append("\n## Weekdoelen")
+        for g in goals:
+            parts.append(f"- {g['title']}")
+
+    context = "\n".join(parts)
+
+    response = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{context}\n\n---\nReflecteer op deze check-in. Geef 2-3 korte, scherpe observaties en één concrete vraag die me aan het denken zet.",
+            }
+        ],
+    )
+    return response.content[0].text
+
+
+async def reflect_weekreview(db: aiosqlite.Connection) -> str:
+    """Haiku reflectie op de weekreview van deze week."""
+    now = datetime.now()
+    year, week, _ = now.isocalendar()
+
+    cursor = await db.execute(
+        "SELECT * FROM week_reviews WHERE year = ? AND week_number = ?", (year, week)
+    )
+    current = await cursor.fetchone()
+    if not current:
+        return "Geen weekreview gevonden voor deze week."
+
+    cursor = await db.execute(
+        "SELECT * FROM week_reviews ORDER BY year DESC, week_number DESC LIMIT 3"
+    )
+    all_reviews = await cursor.fetchall()
+
+    cursor = await db.execute(
+        "SELECT title, type FROM goals WHERE status = 'active' ORDER BY type"
+    )
+    goals = await cursor.fetchall()
+
+    parts = [f"## Weekreview week {week} ({year})"]
+    if current["score"]:
+        parts.append(f"- Score: {current['score']}/10")
+    if current["went_well"]:
+        parts.append(f"- Ging goed: {current['went_well']}")
+    if current["improve"]:
+        parts.append(f"- Verbeteren: {current['improve']}")
+    if current["priorities_next_week"]:
+        parts.append(f"- Prioriteiten: {current['priorities_next_week']}")
+
+    prev = [r for r in all_reviews if not (r["year"] == year and r["week_number"] == week)][:2]
+    if prev:
+        parts.append("\n## Vorige weken (context)")
+        for r in prev:
+            parts.append(f"\n### Week {r['week_number']} ({r['year']})")
+            if r["score"]:
+                parts.append(f"- Score: {r['score']}/10")
+            if r["went_well"]:
+                parts.append(f"- Ging goed: {r['went_well']}")
+            if r["improve"]:
+                parts.append(f"- Verbeteren: {r['improve']}")
+
+    if goals:
+        parts.append("\n## Actieve doelen")
+        for g in goals:
+            parts.append(f"- [{g['type']}] {g['title']}")
+
+    context = "\n".join(parts)
+
+    response = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{context}\n\n---\nReflecteer op deze weekreview. Geef 2-3 scherpe observaties over patronen of trends en stel één gerichte vraag voor de komende week.",
+            }
+        ],
+    )
+    return response.content[0].text
+
+
+async def export_week_markdown(db: aiosqlite.Connection) -> str:
+    """Exporteer de laatste 2 weken als markdown voor Claude.ai Projects."""
+    now = datetime.now()
+    year, week, _ = now.isocalendar()
+    context = await _build_context(db, days=14)
+    header = f"# Grip Export — Week {week} ({year})\nGegenereerd: {date.today().isoformat()}\n\n"
+    return header + context

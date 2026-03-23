@@ -445,6 +445,30 @@ textarea {
     font-style: italic;
 }
 
+.claude-insight-box {
+    margin-top: 1rem;
+    background: var(--bg-card);
+    border-left: 3px solid var(--blue);
+    border-radius: 0 8px 8px 0;
+    padding: 0.875rem 1rem;
+}
+
+.claude-insight-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--blue);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.claude-insight-text {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+}
+
 /* Loading */
 .loading {
     display: none;

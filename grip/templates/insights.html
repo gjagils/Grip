@@ -8,6 +8,11 @@
 <div class="page-accent page-accent-blue"></div>
 <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Stel een vraag over je check-ins, doelen en voortgang.</p>
 
+<div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+    <button class="btn btn-small btn-secondary" onclick="exportWeek()" id="export-btn">Kopieer voor Claude</button>
+    <span id="export-confirm" style="font-size: 0.8rem; color: var(--text-muted); display:none;">&#x2713; Gekopieerd!</span>
+</div>
+
 <div class="insight-form">
     <input type="text" id="insight-question" placeholder="Bijv. Hoe gaat het met mijn energie deze week?"
            onkeydown="if(event.key==='Enter')askInsight()">
@@ -85,6 +90,23 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+async function exportWeek() {
+    const btn = document.getElementById('export-btn');
+    const confirm = document.getElementById('export-confirm');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/export/week');
+        const data = await res.json();
+        await navigator.clipboard.writeText(data.markdown);
+        confirm.style.display = 'inline';
+        setTimeout(() => { confirm.style.display = 'none'; }, 3000);
+    } catch {
+        alert('Kopiëren mislukt. Probeer opnieuw.');
+    } finally {
+        btn.disabled = false;
+    }
 }
 </script>
 {% endblock %}

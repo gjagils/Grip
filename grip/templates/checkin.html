@@ -12,6 +12,22 @@
 <div class="card">
     <span class="badge badge-done">&#x2713; Al ingevuld vandaag</span>
     <p style="margin-top: 0.75rem; color: var(--text-muted);">Je kunt je antwoorden bijwerken door het formulier opnieuw in te vullen.</p>
+
+    {% if today_insight %}
+    <div class="claude-insight-box" id="claude-result">
+        <div class="claude-insight-label">Claude's reflectie</div>
+        <div class="claude-insight-text">{{ today_insight }}</div>
+    </div>
+    {% else %}
+    <div style="margin-top: 1rem;">
+        <button class="btn btn-small btn-blue" onclick="askClaude()" id="claude-btn">Vraag Claude</button>
+        <div class="loading" id="claude-loading">Even denken...</div>
+        <div class="claude-insight-box" id="claude-result" style="display:none">
+            <div class="claude-insight-label">Claude's reflectie</div>
+            <div class="claude-insight-text" id="claude-text"></div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -130,6 +146,30 @@ async function toggleDailyTask(taskId, checked) {
 async function deleteDailyTask(taskId) {
     await fetch(`/api/daily-tasks/${taskId}`, { method: 'DELETE' });
     document.getElementById(`daily-task-${taskId}`).remove();
+}
+
+async function askClaude() {
+    const btn = document.getElementById('claude-btn');
+    const loading = document.getElementById('claude-loading');
+    const result = document.getElementById('claude-result');
+    const text = document.getElementById('claude-text');
+
+    btn.disabled = true;
+    btn.style.display = 'none';
+    loading.classList.add('active');
+
+    try {
+        const res = await fetch('/api/reflect/checkin', { method: 'POST' });
+        const data = await res.json();
+        text.textContent = data.response;
+        result.style.display = 'block';
+    } catch {
+        btn.style.display = '';
+        btn.disabled = false;
+        alert('Er ging iets mis. Controleer je API key.');
+    } finally {
+        loading.classList.remove('active');
+    }
 }
 </script>
 {% endblock %}

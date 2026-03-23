@@ -60,4 +60,50 @@
 
     <button type="submit" class="btn btn-primary">Weekreview opslaan</button>
 </form>
+
+{% if existing %}
+<div style="margin-top: 1.5rem;">
+    {% if weekly_insight %}
+    <div class="claude-insight-box">
+        <div class="claude-insight-label">Claude's feedback</div>
+        <div class="claude-insight-text">{{ weekly_insight }}</div>
+    </div>
+    {% else %}
+    <button class="btn btn-blue" onclick="askClaude()" id="claude-btn">Claude's feedback</button>
+    <div class="loading" id="claude-loading">Even denken...</div>
+    <div class="claude-insight-box" id="claude-result" style="display:none">
+        <div class="claude-insight-label">Claude's feedback</div>
+        <div class="claude-insight-text" id="claude-text"></div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function askClaude() {
+    const btn = document.getElementById('claude-btn');
+    const loading = document.getElementById('claude-loading');
+    const result = document.getElementById('claude-result');
+    const text = document.getElementById('claude-text');
+
+    btn.disabled = true;
+    btn.style.display = 'none';
+    loading.classList.add('active');
+
+    try {
+        const res = await fetch('/api/reflect/weekreview', { method: 'POST' });
+        const data = await res.json();
+        text.textContent = data.response;
+        result.style.display = 'block';
+    } catch {
+        btn.style.display = '';
+        btn.disabled = false;
+        alert('Er ging iets mis. Controleer je API key.');
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+</script>
 {% endblock %}

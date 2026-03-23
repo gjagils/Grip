@@ -128,6 +128,13 @@ async def checkin_page(request: Request):
         )
         trackers = [dict(r) for r in await cursor.fetchall()]
 
+        # Bestaand dagelijks inzicht van vandaag
+        cursor = await db.execute(
+            "SELECT response FROM insights WHERE context_type = 'daily' AND date(created_at) = ? ORDER BY created_at DESC LIMIT 1",
+            (today_str,),
+        )
+        existing_insight = await cursor.fetchone()
+
         return templates.TemplateResponse(
             request,
             "checkin.html",
@@ -137,6 +144,7 @@ async def checkin_page(request: Request):
                 "already_done": existing is not None,
                 "daily_tasks": daily_tasks,
                 "trackers": trackers,
+                "today_insight": existing_insight["response"] if existing_insight else None,
             },
         )
     finally:
@@ -262,6 +270,12 @@ async def weekreview_page(request: Request):
         )
         existing = await cursor.fetchone()
 
+        # Meest recente weekreview-inzicht
+        cursor = await db.execute(
+            "SELECT response FROM insights WHERE context_type = 'weekly' ORDER BY created_at DESC LIMIT 1"
+        )
+        weekly_insight = await cursor.fetchone()
+
         return templates.TemplateResponse(
             request,
             "weekreview.html",
@@ -270,6 +284,7 @@ async def weekreview_page(request: Request):
                 "year": year,
                 "week": week,
                 "existing": dict(existing) if existing else None,
+                "weekly_insight": weekly_insight["response"] if weekly_insight else None,
             },
         )
     finally:
@@ -702,5 +717,45 @@ async def ask_insight(request: Request):
         await db.commit()
 
         return JSONResponse({"response": response})
+    finally:
+        await db.close()
+
+
+@app.post("/api/reflect/checkin")
+async def reflect_checkin(request: Request):
+    db = await get_db()
+    try:
+        response = await insights.reflect_checkin(db)
+        await db.execute(
+            "INSERT INTO insights (prompt, response, context_type) VALUES (?, ?, 'daily')",
+            ("Dagelijkse check-in reflectie", response),
+        )
+        await db.commit()
+        return JSONResponse({"response": response})
+    finally:
+        await db.close()
+
+
+@app.post("/api/reflect/weekreview")
+async def reflect_weekreview(request: Request):
+    db = await get_db()
+    try:
+        response = await insights.reflect_weekreview(db)
+        await db.execute(
+            "INSERT INTO insights (prompt, response, context_type) VALUES (?, ?, 'weekly')",
+            ("Weekreview reflectie", response),
+        )
+        await db.commit()
+        return JSONResponse({"response": response})
+    finally:
+        await db.close()
+
+
+@app.get("/api/export/week")
+async def export_week(request: Request):
+    db = await get_db()
+    try:
+        markdown = await insights.export_week_markdown(db)
+        return JSONResponse({"markdown": markdown})
     finally:
         await db.close()
