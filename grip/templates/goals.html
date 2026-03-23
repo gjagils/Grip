@@ -4,101 +4,94 @@
 {% block title %}Doelen — Grip{% endblock %}
 
 {% block content %}
-<h1><span class="doodle-underline">Doelen</span></h1>
-<div class="page-accent page-accent-orange"></div>
+<!-- Snap-knop: verplaats browservenster naar links 25% -->
+<button class="snap-window-btn" onclick="snapToLeft()" title="Snap naar links (25% breed)">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="1" y="2" width="6" height="12" rx="1"/><path d="M10 5l3 3-3 3"/></svg>
+</button>
 
-<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
-    <button class="btn btn-primary btn-small" onclick="openModal('goal-modal')">+ Nieuw doel</button>
+<div class="goals-header">
+    <h1><span class="doodle-underline">Doelen</span></h1>
+    <button class="btn btn-primary btn-small" onclick="openModal('goal-modal')">+ Nieuw</button>
 </div>
 
-{% macro goal_card(goal) %}
-<div class="card">
-    <div class="goal-item">
-        <div style="flex: 1;">
-            <div class="goal-title">{{ goal.title }}</div>
-            {% if goal.description %}
-            <div class="goal-meta">{{ goal.description }}</div>
-            {% endif %}
-            {% if goal.type == 'quarterly' %}
-            <div class="goal-meta">{{ goal.quarter }} {{ goal.year }}</div>
-            {% endif %}
-        </div>
-        <div style="display: flex; gap: 0.25rem;">
-            <button class="btn btn-small btn-success" onclick="updateGoalStatus({{ goal.id }}, 'completed')" title="Afronden">&#x2713;</button>
-        </div>
+{% macro goal_section(goals, section_type, label, week=none, quarter=none, year=none) %}
+<div class="goal-section">
+    <div class="goal-section-header">
+        <span class="goal-section-dot goal-dot-{{ section_type }}"></span>
+        <span class="goal-section-title">{{ label }}</span>
+        {% if goals %}
+        <span class="goal-section-count">{{ goals|length }}</span>
+        {% endif %}
     </div>
 
-    <!-- Taken bij dit doel -->
-    {% set tasks = goal_tasks.get(goal.id, []) %}
-    {% if tasks %}
-    <div class="task-list" style="margin-top: 0.5rem; border-top: 1.5px dashed var(--border); padding-top: 0.5rem;">
-        {% for task in tasks %}
-        <div class="task-item" id="goal-task-{{ task.id }}">
-            <label class="task-check">
-                <input type="checkbox" {% if task.completed %}checked{% endif %}
-                       onchange="toggleGoalTask({{ task.id }})">
-                <span class="task-label {% if task.completed %}task-done{% endif %}">{{ task.title }}</span>
-            </label>
-            <button class="task-delete" onclick="deleteGoalTask({{ task.id }})" title="Verwijder">&times;</button>
+    <div class="goal-section-list">
+        {% for goal in goals %}
+        {% set tasks = goal_tasks.get(goal.id, []) %}
+        {% set done_count = tasks|selectattr('completed')|list|length %}
+        <div class="goal-row" id="goal-row-{{ goal.id }}">
+            <div class="goal-row-main">
+                <button class="goal-complete-btn" onclick="updateGoalStatus({{ goal.id }}, 'completed')" title="Afronden">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="8" cy="8" r="6.5"/></svg>
+                </button>
+                <div class="goal-row-body">
+                    <span class="goal-row-title">{{ goal.title }}</span>
+                    {% if tasks %}
+                    <span class="goal-row-progress goal-progress-{{ section_type }}">{{ done_count }}/{{ tasks|length }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if tasks %}
+            <div class="goal-tasks-list">
+                {% for task in tasks %}
+                <div class="goal-task-row" id="goal-task-{{ task.id }}">
+                    <label class="goal-task-check">
+                        <input type="checkbox" {% if task.completed %}checked{% endif %}
+                               onchange="toggleGoalTask({{ task.id }})">
+                        <span class="goal-task-label {% if task.completed %}task-done{% endif %}">{{ task.title }}</span>
+                    </label>
+                    <button class="goal-task-del" onclick="deleteGoalTask({{ task.id }})" title="Verwijder">&times;</button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="/api/goals/{{ goal.id }}/tasks" class="goal-task-add">
+                <input type="text" name="title" placeholder="Taak toevoegen...">
+                <button type="submit">+</button>
+            </form>
         </div>
         {% endfor %}
-    </div>
-    {% endif %}
 
-    <!-- Taak toevoegen -->
-    <form method="POST" action="/api/goals/{{ goal.id }}/tasks" class="task-add-form" style="margin-top: 0.5rem;">
-        <input type="text" name="title" placeholder="Taak toevoegen..." class="task-add-input">
-        <button type="submit" class="btn btn-small btn-secondary">+</button>
-    </form>
-
-    {% if tasks %}
-    <div class="task-progress" style="margin-top: 0.5rem;">
-        {% set done = tasks|selectattr('completed')|list|length %}
-        <div class="progress-bar">
-            <div class="progress-fill" style="width: {{ (done / tasks|length * 100)|int }}%"></div>
-        </div>
-        <span class="task-progress-text">{{ done }}/{{ tasks|length }} taken</span>
+        <form method="POST" action="/api/goals" class="goal-inline-add">
+            <input type="hidden" name="type" value="{{ section_type }}">
+            <input type="hidden" name="year" value="{{ current_year }}">
+            {% if section_type == 'quarterly' %}
+            <input type="hidden" name="quarter" value="{{ current_quarter }}">
+            {% endif %}
+            <input type="text" name="title" placeholder="+ Doel toevoegen...">
+        </form>
     </div>
-    {% endif %}
 </div>
 {% endmacro %}
 
-{% if yearly_goals %}
-<h2>&#x2B50; Jaardoelen {{ current_year }}</h2>
-{% for goal in yearly_goals %}
-{{ goal_card(goal) }}
-{% endfor %}
-{% endif %}
-
-{% if quarterly_goals %}
-<h2>&#x1F3AF; Kwartaaldoelen {{ current_quarter }} {{ current_year }}</h2>
-{% for goal in quarterly_goals %}
-{{ goal_card(goal) }}
-{% endfor %}
-{% endif %}
-
-{% if not yearly_goals and not quarterly_goals %}
-<div class="card card-doodle">
-    <div class="empty-state">
-        <p>Nog geen actieve doelen</p>
-        <p style="margin-top: 0.5rem; font-size: 0.9rem;">Stel je jaar- en kwartaaldoelen in om focus te houden.</p>
-    </div>
-</div>
-{% endif %}
+{{ goal_section(weekly_goals, 'weekly', 'Week ' ~ current_week) }}
+{{ goal_section(quarterly_goals, 'quarterly', current_quarter ~ ' ' ~ current_year) }}
+{{ goal_section(yearly_goals, 'yearly', current_year|string) }}
 
 {% if archived_goals %}
-<details style="margin-top: 1.5rem;">
-    <summary>Afgeronde & verlaten doelen ({{ archived_goals|length }})</summary>
+<details class="goal-archive">
+    <summary>Afgerond & verlaten ({{ archived_goals|length }})</summary>
     {% for goal in archived_goals %}
-    <div class="card" style="margin-top: 0.5rem; opacity: 0.6;">
-        <div class="goal-title">{{ goal.title }}</div>
-        <div class="goal-meta">{{ goal.type }} {{ goal.year }}{% if goal.quarter %} {{ goal.quarter }}{% endif %} — {{ goal.status }}</div>
+    <div class="goal-archive-item">
+        <span>{{ goal.title }}</span>
+        <span class="goal-archive-meta">{{ goal.type }}{% if goal.quarter %} {{ goal.quarter }}{% endif %} {{ goal.year }}</span>
     </div>
     {% endfor %}
 </details>
 {% endif %}
 
-<!-- Modal: Nieuw doel -->
+<!-- Modal: Nieuw doel (voor complexe gevallen) -->
 <div class="modal-overlay" id="goal-modal" onclick="if(event.target===this)closeModal('goal-modal')">
     <div class="modal">
         <h2>Nieuw doel</h2>
@@ -109,16 +102,17 @@
             </div>
             <div class="form-group">
                 <label>Beschrijving (optioneel)</label>
-                <textarea name="description" rows="3" placeholder="Meer context..."></textarea>
+                <textarea name="description" rows="2" placeholder="Meer context..."></textarea>
             </div>
             <div class="form-group">
                 <label>Type</label>
-                <select name="type" onchange="document.getElementById('quarter-field').style.display = this.value === 'quarterly' ? 'block' : 'none'">
-                    <option value="yearly">Jaardoel</option>
+                <select name="type" id="modal-type" onchange="onTypeChange(this.value)">
+                    <option value="weekly">Weekdoel (week {{ current_week }})</option>
                     <option value="quarterly">Kwartaaldoel</option>
+                    <option value="yearly">Jaardoel</option>
                 </select>
             </div>
-            <div class="form-group" id="quarter-field" style="display: none;">
+            <div class="form-group" id="quarter-field" style="display:none">
                 <label>Kwartaal</label>
                 <select name="quarter">
                     <option value="Q1">Q1 (jan-mrt)</option>
@@ -128,7 +122,7 @@
                 </select>
             </div>
             <input type="hidden" name="year" value="{{ current_year }}">
-            <button type="submit" class="btn btn-primary">Doel opslaan</button>
+            <button type="submit" class="btn btn-primary">Opslaan</button>
         </form>
     </div>
 </div>
@@ -136,12 +130,23 @@
 
 {% block scripts %}
 <script>
+function snapToLeft() {
+    const w = Math.round(screen.width * 0.25);
+    const h = screen.height;
+    window.moveTo(0, 0);
+    window.resizeTo(w, h);
+}
+
 function openModal(id) {
     document.getElementById(id).classList.add('active');
 }
 
 function closeModal(id) {
     document.getElementById(id).classList.remove('active');
+}
+
+function onTypeChange(val) {
+    document.getElementById('quarter-field').style.display = val === 'quarterly' ? 'block' : 'none';
 }
 
 async function updateGoalStatus(goalId, status) {
@@ -155,8 +160,8 @@ async function updateGoalStatus(goalId, status) {
 
 async function toggleGoalTask(taskId) {
     await fetch(`/api/goal-tasks/${taskId}/toggle`, { method: 'POST' });
-    const label = document.querySelector(`#goal-task-${taskId} .task-label`);
-    label.classList.toggle('task-done');
+    const row = document.getElementById(`goal-task-${taskId}`);
+    row.querySelector('.goal-task-label').classList.toggle('task-done');
 }
 
 async function deleteGoalTask(taskId) {

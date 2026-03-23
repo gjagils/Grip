@@ -47,9 +47,10 @@ CREATE TABLE IF NOT EXISTS goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     description TEXT,
-    type TEXT NOT NULL CHECK (type IN ('yearly', 'quarterly')),
-    quarter TEXT CHECK (quarter IN ('Q1', 'Q2', 'Q3', 'Q4')),
+    type TEXT NOT NULL CHECK (type IN ('yearly', 'quarterly', 'weekly')),
+    quarter TEXT,
     year INTEGER NOT NULL,
+    week_number INTEGER,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'abandoned')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -124,10 +125,41 @@ async def init_db():
     db = await get_db()
     try:
         await db.executescript(SCHEMA)
+        await _migrate_db(db)
         await _seed_questions(db)
         await db.commit()
     finally:
         await db.close()
+
+
+async def _migrate_db(db: aiosqlite.Connection):
+    """Voert schema-migraties uit voor bestaande databases."""
+    cursor = await db.execute("PRAGMA table_info(goals)")
+    cols = {row[1] for row in await cursor.fetchall()}
+
+    if "week_number" not in cols:
+        # Hermaak goals-tabel met weekly-type en week_number-kolom
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS goals_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                type TEXT NOT NULL CHECK (type IN ('yearly', 'quarterly', 'weekly')),
+                quarter TEXT,
+                year INTEGER NOT NULL,
+                week_number INTEGER,
+                status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'abandoned')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("""
+            INSERT INTO goals_v2 (id, title, description, type, quarter, year, status, created_at, updated_at)
+            SELECT id, title, description, type, quarter, year, status, created_at, updated_at FROM goals
+        """)
+        await db.execute("DROP TABLE goals")
+        await db.execute("ALTER TABLE goals_v2 RENAME TO goals")
+        await db.commit()
 
 
 async def _seed_questions(db: aiosqlite.Connection):

@@ -388,18 +388,28 @@ async def goals_page(request: Request):
         now = datetime.now()
         year = now.year
         quarter = f"Q{(now.month - 1) // 3 + 1}"
+        _, week, _ = now.isocalendar()
 
         cursor = await db.execute(
             "SELECT * FROM goals ORDER BY status, type, year DESC, quarter"
         )
         all_goals = [dict(r) for r in await cursor.fetchall()]
 
-        yearly = [g for g in all_goals if g["type"] == "yearly" and g["status"] == "active"]
-        quarterly = [g for g in all_goals if g["type"] == "quarterly" and g["status"] == "active"]
+        weekly = [
+            g for g in all_goals
+            if g["type"] == "weekly" and g["status"] == "active"
+            and g["year"] == year and g["week_number"] == week
+        ]
+        quarterly = [
+            g for g in all_goals
+            if g["type"] == "quarterly" and g["status"] == "active"
+            and g["year"] == year and g["quarter"] == quarter
+        ]
+        yearly = [g for g in all_goals if g["type"] == "yearly" and g["status"] == "active" and g["year"] == year]
         archived = [g for g in all_goals if g["status"] != "active"]
 
         # Taken per doel laden
-        active_ids = [g["id"] for g in yearly + quarterly]
+        active_ids = [g["id"] for g in weekly + quarterly + yearly]
         goal_tasks: dict[int, list[dict]] = {gid: [] for gid in active_ids}
         if active_ids:
             placeholders = ",".join("?" * len(active_ids))
@@ -414,12 +424,14 @@ async def goals_page(request: Request):
             "goals.html",
             {
                 "request": request,
-                "yearly_goals": yearly,
+                "weekly_goals": weekly,
                 "quarterly_goals": quarterly,
+                "yearly_goals": yearly,
                 "archived_goals": archived,
                 "goal_tasks": goal_tasks,
                 "current_year": year,
                 "current_quarter": quarter,
+                "current_week": week,
             },
         )
     finally:
@@ -431,14 +443,20 @@ async def create_goal(request: Request):
     db = await get_db()
     try:
         form = await request.form()
+        goal_type = form["type"]
+        now = datetime.now()
+        _, current_week, _ = now.isocalendar()
+        week_number = current_week if goal_type == "weekly" else None
+        quarter = form.get("quarter") or None if goal_type == "quarterly" else None
         await db.execute(
-            "INSERT INTO goals (title, description, type, quarter, year) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO goals (title, description, type, quarter, year, week_number) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 form["title"],
                 form.get("description", ""),
-                form["type"],
-                form.get("quarter") or None,
+                goal_type,
+                quarter,
                 int(form["year"]),
+                week_number,
             ),
         )
         await db.commit()

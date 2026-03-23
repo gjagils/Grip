@@ -756,6 +756,324 @@ details summary:hover {
     color: var(--success);
 }
 
+/* =============================================
+   GOALS PAGE — Todoist-stijl + doodle titels
+   ============================================= */
+
+/* Kleur per doeltype */
+:root {
+    --goal-weekly: #7c3aed;
+    --goal-weekly-soft: #7c3aed18;
+    --goal-quarterly: #2563eb;
+    --goal-quarterly-soft: #2563eb14;
+    --goal-yearly: #059669;
+    --goal-yearly-soft: #05966912;
+}
+
+/* Header met snap-knop naast h1 */
+.goals-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.goals-header h1 {
+    margin-bottom: 0;
+}
+
+/* Snap-venster knop — kleine vaste knop rechtsboven */
+.snap-window-btn {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 50;
+    background: var(--surface);
+    border: 1.5px solid var(--border-sketch);
+    border-radius: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    box-shadow: 1px 2px 0 var(--border);
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.snap-window-btn:hover {
+    color: var(--goal-weekly);
+    border-color: var(--goal-weekly);
+}
+
+/* Sectie wrapper */
+.goal-section {
+    margin-bottom: 2rem;
+}
+
+/* Sectie-header: stip + titel (handgeschreven) + count */
+.goal-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1.5px solid var(--border);
+}
+
+.goal-section-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.goal-dot-weekly   { background: var(--goal-weekly); }
+.goal-dot-quarterly { background: var(--goal-quarterly); }
+.goal-dot-yearly   { background: var(--goal-yearly); }
+
+.goal-section-title {
+    font-family: var(--handwritten);
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    flex: 1;
+}
+
+.goal-section-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 1px 7px;
+}
+
+/* Lijst binnen sectie */
+.goal-section-list {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Eén doelrij */
+.goal-row {
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 0;
+}
+
+.goal-row:last-of-type {
+    border-bottom: none;
+}
+
+/* Hoofd-rij: rondje + titel + voortgang */
+.goal-row-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+}
+
+.goal-complete-btn {
+    background: none;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    color: var(--border-sketch);
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: color 0.15s;
+}
+
+.goal-complete-btn:hover {
+    color: var(--success);
+}
+
+.goal-complete-btn:hover svg circle {
+    stroke: var(--success);
+    fill: var(--success-soft);
+}
+
+.goal-row-body {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.goal-row-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.4;
+}
+
+.goal-row-progress {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
+.goal-progress-weekly   { background: var(--goal-weekly-soft);   color: var(--goal-weekly); }
+.goal-progress-quarterly { background: var(--goal-quarterly-soft); color: var(--goal-quarterly); }
+.goal-progress-yearly   { background: var(--goal-yearly-soft);   color: var(--goal-yearly); }
+
+/* Taken onder een doel */
+.goal-tasks-list {
+    margin-left: 1.6rem;
+    margin-top: 0.3rem;
+}
+
+.goal-task-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    border-bottom: 1px dashed var(--border);
+}
+
+.goal-task-row:last-child {
+    border-bottom: none;
+}
+
+.goal-task-check {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    flex: 1;
+}
+
+.goal-task-check input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--orange);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.goal-task-label {
+    font-size: 0.85rem;
+    color: var(--text);
+    transition: all 0.15s;
+}
+
+.goal-task-del {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 0.2rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.goal-task-row:hover .goal-task-del {
+    opacity: 0.5;
+}
+
+.goal-task-del:hover {
+    opacity: 1 !important;
+    color: var(--danger);
+}
+
+/* Inline taak-toevoegen onder een doel */
+.goal-task-add {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 1.6rem;
+    margin-top: 0.4rem;
+}
+
+.goal-task-add input {
+    flex: 1;
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.82rem !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    color: var(--text-muted);
+}
+
+.goal-task-add input:focus {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text);
+}
+
+.goal-task-add button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    display: none;
+}
+
+.goal-task-add input:focus ~ button,
+.goal-task-add:focus-within button {
+    display: inline;
+}
+
+/* Inline doel toevoegen onderaan een sectie */
+.goal-inline-add {
+    margin-top: 0.5rem;
+}
+
+.goal-inline-add input {
+    width: 100%;
+    padding: 0.4rem 0 !important;
+    font-size: 0.88rem !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px dashed var(--border) !important;
+    border-radius: 0 !important;
+    color: var(--text-muted);
+    box-shadow: none !important;
+}
+
+.goal-inline-add input:focus {
+    color: var(--text);
+    border-bottom-color: var(--text-muted) !important;
+    outline: none;
+}
+
+.goal-inline-add input::placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+/* Archief */
+.goal-archive {
+    margin-top: 2rem;
+    opacity: 0.6;
+}
+
+.goal-archive summary {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.4rem 0;
+    font-weight: 500;
+}
+
+.goal-archive-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.35rem 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.85rem;
+}
+
+.goal-archive-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* Tracker config page */
 .tracker-config-item {
     display: flex;
