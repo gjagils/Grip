@@ -61,9 +61,9 @@ async def dashboard(request: Request):
         streak = _calculate_streak(checkin_dates)
 
         return templates.TemplateResponse(
+            request,
             "dashboard.html",
             {
-                "request": request,
                 "today": today,
                 "has_checkin": todays_checkin is not None,
                 "has_week_review": weeks_review is not None,
@@ -129,9 +129,9 @@ async def checkin_page(request: Request):
         trackers = [dict(r) for r in await cursor.fetchall()]
 
         return templates.TemplateResponse(
+            request,
             "checkin.html",
             {
-                "request": request,
                 "questions": questions,
                 "today": today_str,
                 "already_done": existing is not None,
@@ -240,10 +240,7 @@ async def checkin_history(request: Request):
             if r["text"]:
                 history[d].append(dict(r))
 
-        return templates.TemplateResponse(
-            "history.html",
-            {"request": request, "history": history},
-        )
+        return templates.TemplateResponse(request, "history.html", {"history": history})
     finally:
         await db.close()
 
@@ -266,9 +263,9 @@ async def weekreview_page(request: Request):
         existing = await cursor.fetchone()
 
         return templates.TemplateResponse(
+            request,
             "weekreview.html",
             {
-                "request": request,
                 "questions": questions,
                 "year": year,
                 "week": week,
@@ -363,9 +360,9 @@ async def focus_sidebar(request: Request):
         yearly_goals = [dict(r) for r in await cursor.fetchall()]
 
         return templates.TemplateResponse(
+            request,
             "focus.html",
             {
-                "request": request,
                 "priorities": priorities,
                 "quarterly_goals": quarterly_goals,
                 "yearly_goals": yearly_goals,
@@ -421,9 +418,9 @@ async def goals_page(request: Request):
                 goal_tasks[t["goal_id"]].append(dict(t))
 
         return templates.TemplateResponse(
+            request,
             "goals.html",
             {
-                "request": request,
                 "weekly_goals": weekly,
                 "quarterly_goals": quarterly,
                 "yearly_goals": yearly,
@@ -613,10 +610,7 @@ async def trackers_page(request: Request):
         cursor = await db.execute("SELECT * FROM trackers ORDER BY sort_order, id")
         all_trackers = [dict(r) for r in await cursor.fetchall()]
 
-        return templates.TemplateResponse(
-            "trackers.html",
-            {"request": request, "trackers": all_trackers},
-        )
+        return templates.TemplateResponse(request, "trackers.html", {"trackers": all_trackers})
     finally:
         await db.close()
 
@@ -684,10 +678,7 @@ async def insights_page(request: Request):
         )
         history = [dict(r) for r in await cursor.fetchall()]
 
-        return templates.TemplateResponse(
-            "insights.html",
-            {"request": request, "history": history},
-        )
+        return templates.TemplateResponse(request, "insights.html", {"history": history})
     finally:
         await db.close()
 
