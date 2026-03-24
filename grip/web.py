@@ -1,9 +1,10 @@
+import json
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -757,5 +758,79 @@ async def export_week(request: Request):
     try:
         markdown = await insights.export_week_markdown(db)
         return JSONResponse({"markdown": markdown})
+    finally:
+        await db.close()
+
+
+# --- Coach Chat ---
+
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request):
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, role, content, created_at FROM chat_messages ORDER BY id ASC"
+        )
+        history = [dict(r) for r in await cursor.fetchall()]
+        return templates.TemplateResponse(request, "chat.html", {"history": history})
+    finally:
+        await db.close()
+
+
+@app.post("/api/chat")
+async def chat_send(request: Request):
+    data = await request.json()
+    user_message = data.get("message", "").strip()
+    if not user_message:
+        return JSONResponse({"error": "Geen bericht"}, status_code=400)
+
+    db = await get_db()
+
+    # Sla gebruikersbericht op
+    await db.execute(
+        "INSERT INTO chat_messages (role, content) VALUES ('user', ?)", (user_message,)
+    )
+    await db.commit()
+
+    # Bouw context en geschiedenis
+    system = await insights.build_chat_system(db)
+    messages = await insights.load_chat_history(db, limit=40)
+
+    async def generate():
+        full_response = ""
+        try:
+            async with insights.client.messages.stream(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=1024,
+                system=system,
+                messages=messages,
+            ) as stream:
+                async for text in stream.text_stream:
+                    full_response += text
+                    yield f"data: {json.dumps({'delta': text})}\n\n"
+
+            # Sla het complete antwoord op
+            await db.execute(
+                "INSERT INTO chat_messages (role, content) VALUES ('assistant', ?)",
+                (full_response,),
+            )
+            await db.commit()
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        finally:
+            await db.close()
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/api/chat/clear")
+async def chat_clear(request: Request):
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM chat_messages")
+        await db.commit()
+        return JSONResponse({"ok": True})
     finally:
         await db.close()

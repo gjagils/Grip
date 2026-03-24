@@ -109,6 +109,13 @@ CREATE TABLE IF NOT EXISTS insights (
     context_type TEXT NOT NULL DEFAULT 'general' CHECK (context_type IN ('daily', 'weekly', 'quarterly', 'general')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 

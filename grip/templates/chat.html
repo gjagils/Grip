@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% set active_nav = "chat" %}
+
+{% block title %}Coach — Grip{% endblock %}
+
+{% block content %}
+<div class="chat-header">
+    <div>
+        <h1 style="margin:0; font-size:1.4rem;">Coach</h1>
+        <p style="margin:0; font-size:0.8rem; color:var(--text-muted);">Accountability partner — doorlopend gesprek</p>
+    </div>
+    <button class="btn btn-small btn-secondary" onclick="clearChat()" title="Nieuw gesprek starten">Wis gesprek</button>
+</div>
+
+<div class="chat-messages" id="chat-messages">
+    {% if not history %}
+    <div class="chat-empty" id="chat-empty">
+        <p>Nog geen gesprek.</p>
+        <p style="font-size:0.85rem; margin-top:0.25rem;">Stel een vraag of start een check-in bespreking.</p>
+        <div class="chat-starters">
+            <button onclick="sendStarter('Hoe gaat het met mijn voortgang op mijn doelen?')">Hoe sta ik ervoor met mijn doelen?</button>
+            <button onclick="sendStarter('Wat valt je op in mijn check-ins van de afgelopen weken?')">Patronen in mijn check-ins</button>
+            <button onclick="sendStarter('Waar moet ik deze week op focussen?')">Wat moet ik nu focussen?</button>
+        </div>
+    </div>
+    {% endif %}
+
+    {% for msg in history %}
+    <div class="chat-bubble chat-bubble-{{ msg.role }}">
+        <div class="chat-bubble-content">{{ msg.content }}</div>
+        <div class="chat-bubble-time">{{ msg.created_at[:16] }}</div>
+    </div>
+    {% endfor %}
+
+    <div class="chat-bubble chat-bubble-assistant chat-typing" id="chat-typing" style="display:none">
+        <div class="chat-bubble-content">
+            <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+        </div>
+    </div>
+</div>
+
+<div class="chat-input-area">
+    <textarea id="chat-input" placeholder="Stel een vraag..." rows="1"
+              onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="chat-send-btn" onclick="sendMessage()" id="send-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const messagesEl = document.getElementById('chat-messages');
+const inputEl = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const typingEl = document.getElementById('chat-typing');
+
+// Scroll naar beneden bij laden
+scrollToBottom();
+
+function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function sendStarter(text) {
+    inputEl.value = text;
+    sendMessage();
+}
+
+function addBubble(role, content) {
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    div.className = `chat-bubble chat-bubble-${role}`;
+    div.innerHTML = `<div class="chat-bubble-content"></div><div class="chat-bubble-time">Zojuist</div>`;
+    div.querySelector('.chat-bubble-content').textContent = content;
+    messagesEl.insertBefore(div, typingEl);
+    scrollToBottom();
+    return div;
+}
+
+async function sendMessage() {
+    const message = inputEl.value.trim();
+    if (!message || sendBtn.disabled) return;
+
+    // Reset input
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    // Toon gebruikersbericht
+    addBubble('user', message);
+
+    // Toon typing indicator
+    typingEl.style.display = 'block';
+    scrollToBottom();
+
+    // Maak assistant bubble aan voor streaming
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.remove();
+    const assistantDiv = document.createElement('div');
+    assistantDiv.className = 'chat-bubble chat-bubble-assistant';
+    assistantDiv.innerHTML = `<div class="chat-bubble-content"></div><div class="chat-bubble-time">Zojuist</div>`;
+    const contentEl = assistantDiv.querySelector('.chat-bubble-content');
+    messagesEl.insertBefore(assistantDiv, typingEl);
+
+    try {
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+
+        typingEl.style.display = 'none';
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // bewaar onvolledig stuk
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.delta) {
+                        contentEl.textContent += data.delta;
+                        scrollToBottom();
+                    }
+                    if (data.error) {
+                        contentEl.textContent = 'Er ging iets mis: ' + data.error;
+                    }
+                } catch {}
+            }
+        }
+    } catch (err) {
+        typingEl.style.display = 'none';
+        contentEl.textContent = 'Verbindingsfout. Probeer opnieuw.';
+    } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+        scrollToBottom();
+    }
+}
+
+async function clearChat() {
+    if (!confirm('Wil je het gesprek wissen? Dit kan niet ongedaan worden gemaakt.')) return;
+    await fetch('/api/chat/clear', { method: 'POST' });
+    window.location.reload();
+}
+</script>
+{% endblock %}

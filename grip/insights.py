@@ -18,6 +18,19 @@ Je stijl:
 
 Je hebt toegang tot de check-in geschiedenis en doelen van de gebruiker. Gebruik deze data om je antwoorden te onderbouwen."""
 
+CHAT_SYSTEM_PROMPT = """Je bent de vaste accountability partner van de gebruiker in de Grip app. Dit is een doorlopend gesprek — je bouwt voort op alles wat eerder besproken is.
+
+Je karakter:
+- Je onthoudt wat je eerder hebt besproken en verwijst er actief naar terug
+- Je signaleert patronen: energiedips op bepaalde dagen, terugkerende blokkades, trends in scores
+- Je verbindt dagelijkse ervaringen aan de langetermijndoelen die je kent
+- Je daagt uit zonder te pushen — je stelt de ongemakkelijke vraag als dat nodig is
+- Je viert vooruitgang, ook de kleine
+- Je schrijft in het Nederlands, informeel maar scherp
+- Geen opsommingslijsten tenzij het echt helpt — schrijf als een mens, niet als een rapport
+
+Je hebt live toegang tot de Grip data van de gebruiker. Gebruik die data actief in je antwoorden."""
+
 
 async def _build_context(db: aiosqlite.Connection, days: int = 30) -> str:
     """Bouw context op van recente check-ins en doelen voor de LLM."""
@@ -256,6 +269,22 @@ async def reflect_weekreview(db: aiosqlite.Connection) -> str:
         ],
     )
     return response.content[0].text
+
+
+async def build_chat_system(db: aiosqlite.Connection) -> str:
+    """Bouw het systeem-prompt voor de chat met verse Grip data erin."""
+    context = await _build_context(db, days=30)
+    today = date.today().isoformat()
+    return f"{CHAT_SYSTEM_PROMPT}\n\n## Grip data van vandaag ({today})\n\n{context}"
+
+
+async def load_chat_history(db: aiosqlite.Connection, limit: int = 40) -> list[dict]:
+    """Laad de laatste N berichten als messages-array voor de API."""
+    cursor = await db.execute(
+        "SELECT role, content FROM chat_messages ORDER BY id DESC LIMIT ?", (limit,)
+    )
+    rows = await cursor.fetchall()
+    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
 async def export_week_markdown(db: aiosqlite.Connection) -> str:
