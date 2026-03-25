@@ -834,3 +834,102 @@ async def chat_clear(request: Request):
         return JSONResponse({"ok": True})
     finally:
         await db.close()
+
+
+# --- Health Sync (Apple Shortcuts → Grip) ---
+
+# Veldnaam → (tracker naam, eenheid, type)
+_HEALTH_FIELDS = {
+    "steps":            ("Stappen",             "stappen", "number"),
+    "active_calories":  ("Actieve calorieën",   "kcal",    "number"),
+    "exercise_minutes": ("Beweegminuten",        "min",     "number"),
+    "stand_hours":      ("Staande uren",         "uur",     "number"),
+    "sleep_hours":      ("Slaap",                "uur",     "number"),
+    "distance_km":      ("Afstand",              "km",      "number"),
+}
+
+
+@app.post("/api/health/sync")
+async def health_sync(request: Request):
+    """
+    Ontvangt gezondheidsdata van Apple Shortcuts.
+
+    Verwacht JSON:
+    {
+      "date": "2026-03-24",          ← gisteren, optioneel (default: gisteren)
+      "steps": 9823,
+      "active_calories": 412,
+      "exercise_minutes": 38,
+      "stand_hours": 11,
+      "sleep_hours": 7.2,
+      "distance_km": 7.4
+    }
+    Alle velden zijn optioneel. Alleen meegestuurde velden worden opgeslagen.
+    """
+    data = await request.json()
+    db = await get_db()
+    try:
+        # Default: gisteren
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        sync_date = data.get("date", yesterday)
+
+        synced: list[str] = []
+
+        for field, (name, unit, ttype) in _HEALTH_FIELDS.items():
+            value = data.get(field)
+            if value is None:
+                continue
+
+            # Zoek of maak tracker aan
+            cursor = await db.execute(
+                "SELECT id FROM trackers WHERE name = ?", (name,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                tracker_id = row["id"]
+            else:
+                cursor = await db.execute(
+                    "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM trackers"
+                )
+                next_order = (await cursor.fetchone())[0]
+                cursor = await db.execute(
+                    "INSERT INTO trackers (name, unit, type, sort_order) VALUES (?, ?, ?, ?)",
+                    (name, unit, ttype, next_order),
+                )
+                tracker_id = cursor.lastrowid
+
+            # Upsert waarde
+            await db.execute(
+                """INSERT INTO tracker_entries (tracker_id, date, value)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value""",
+                (tracker_id, sync_date, float(value)),
+            )
+            synced.append(name)
+
+        await db.commit()
+        return JSONResponse({"ok": True, "synced": synced, "date": sync_date})
+    finally:
+        await db.close()
+
+
+@app.get("/api/health/status")
+async def health_status(request: Request):
+    """Geeft de meest recente health-sync terug — handig voor testen vanuit Shortcuts."""
+    db = await get_db()
+    try:
+        health_names = [v[0] for v in _HEALTH_FIELDS.values()]
+        placeholders = ",".join("?" * len(health_names))
+        cursor = await db.execute(
+            f"""SELECT t.name, te.date, te.value
+                FROM tracker_entries te
+                JOIN trackers t ON te.tracker_id = t.id
+                WHERE t.name IN ({placeholders})
+                ORDER BY te.date DESC, t.name
+                LIMIT 20""",
+            health_names,
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+        return JSONResponse({"entries": rows})
+    finally:
+        await db.close()
