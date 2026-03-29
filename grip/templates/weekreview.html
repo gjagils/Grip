@@ -78,9 +78,15 @@
                 {% for val in t.values %}
                 {% if val is not none %}
                     {% if t.threshold_green is not none and t.threshold_red is not none %}
-                        {% if val >= t.threshold_green %}{% set cell_class = 'cell-green' %}
-                        {% elif val < t.threshold_red %}{% set cell_class = 'cell-red' %}
-                        {% else %}{% set cell_class = 'cell-orange' %}{% endif %}
+                        {% if t.threshold_direction == 'lower' %}
+                            {% if val <= t.threshold_green %}{% set cell_class = 'cell-green' %}
+                            {% elif val > t.threshold_red %}{% set cell_class = 'cell-red' %}
+                            {% else %}{% set cell_class = 'cell-orange' %}{% endif %}
+                        {% else %}
+                            {% if val >= t.threshold_green %}{% set cell_class = 'cell-green' %}
+                            {% elif val < t.threshold_red %}{% set cell_class = 'cell-red' %}
+                            {% else %}{% set cell_class = 'cell-orange' %}{% endif %}
+                        {% endif %}
                     {% else %}{% set cell_class = '' %}{% endif %}
                     <td class="{{ cell_class }}">{{ val|int if t.type == 'number' else '✓' }}</td>
                 {% else %}

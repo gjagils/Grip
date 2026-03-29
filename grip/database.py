@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS trackers (
     sort_order INTEGER NOT NULL DEFAULT 0,
     threshold_green REAL,
     threshold_red REAL,
+    threshold_direction TEXT NOT NULL DEFAULT 'higher' CHECK (threshold_direction IN ('higher', 'lower')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -175,6 +176,8 @@ async def _migrate_db(db: aiosqlite.Connection):
     if "threshold_green" not in tracker_cols:
         await db.execute("ALTER TABLE trackers ADD COLUMN threshold_green REAL")
         await db.execute("ALTER TABLE trackers ADD COLUMN threshold_red REAL")
+    if "threshold_direction" not in tracker_cols:
+        await db.execute("ALTER TABLE trackers ADD COLUMN threshold_direction TEXT NOT NULL DEFAULT 'higher'")
 
     cursor = await db.execute("PRAGMA table_info(goals)")
     cols = {row[1] for row in await cursor.fetchall()}

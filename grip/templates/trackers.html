@@ -29,16 +29,30 @@
     </div>
     {% if t.type == 'number' %}
     <div class="threshold-form" id="thresholds-{{ t.id }}" style="display:none; padding: 0.75rem 0 0.5rem; border-top: 1px solid var(--border);">
-        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem;">🟢 groen ≥ X &nbsp;|&nbsp; 🔴 rood &lt; Y &nbsp;|&nbsp; 🟠 oranje daartussen</p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <div class="threshold-direction-toggle" style="margin-bottom: 0.75rem;">
+            <button type="button" class="dir-btn {% if not t.threshold_direction or t.threshold_direction == 'higher' %}dir-active{% endif %}"
+                    id="dir-higher-{{ t.id }}" onclick="setDirection({{ t.id }}, 'higher')">
+                ↑ Hoger is beter
+            </button>
+            <button type="button" class="dir-btn {% if t.threshold_direction == 'lower' %}dir-active{% endif %}"
+                    id="dir-lower-{{ t.id }}" onclick="setDirection({{ t.id }}, 'lower')">
+                ↓ Lager is beter
+            </button>
+        </div>
+        <input type="hidden" id="dir-{{ t.id }}" value="{{ t.threshold_direction or 'higher' }}">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;" id="labels-{{ t.id }}">
             <div>
-                <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">🟢 Groen vanaf</label>
+                <label id="label-green-{{ t.id }}" style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">
+                    {% if t.threshold_direction == 'lower' %}🟢 Groen tot en met{% else %}🟢 Groen vanaf{% endif %}
+                </label>
                 <input type="number" id="green-{{ t.id }}" placeholder="bijv. 8000" step="any"
                        value="{{ t.threshold_green if t.threshold_green is not none else '' }}"
                        style="width: 100%;">
             </div>
             <div>
-                <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">🔴 Rood onder</label>
+                <label id="label-red-{{ t.id }}" style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">
+                    {% if t.threshold_direction == 'lower' %}🔴 Rood vanaf{% else %}🔴 Rood onder{% endif %}
+                </label>
                 <input type="number" id="red-{{ t.id }}" placeholder="bijv. 5000" step="any"
                        value="{{ t.threshold_red if t.threshold_red is not none else '' }}"
                        style="width: 100%;">
@@ -104,14 +118,24 @@ function toggleThresholds(trackerId) {
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
+function setDirection(trackerId, dir) {
+    document.getElementById(`dir-${trackerId}`).value = dir;
+    document.getElementById(`dir-higher-${trackerId}`).classList.toggle('dir-active', dir === 'higher');
+    document.getElementById(`dir-lower-${trackerId}`).classList.toggle('dir-active', dir === 'lower');
+    document.getElementById(`label-green-${trackerId}`).textContent = dir === 'lower' ? '🟢 Groen tot en met' : '🟢 Groen vanaf';
+    document.getElementById(`label-red-${trackerId}`).textContent = dir === 'lower' ? '🔴 Rood vanaf' : '🔴 Rood onder';
+}
+
 async function saveThresholds(trackerId) {
     const green = document.getElementById(`green-${trackerId}`).value;
     const red = document.getElementById(`red-${trackerId}`).value;
+    const dir = document.getElementById(`dir-${trackerId}`).value;
     const form = new FormData();
     if (green) form.append('threshold_green', green);
     if (red) form.append('threshold_red', red);
+    form.append('threshold_direction', dir);
     await fetch(`/api/trackers/${trackerId}/thresholds`, { method: 'POST', body: form });
-    document.getElementById(`thresholds-${trackerId}`).style.display = 'none';
+    location.reload();
 }
 </script>
 {% endblock %}

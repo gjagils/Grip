@@ -123,7 +123,7 @@ async def checkin_page(request: Request):
         # Actieve trackers — gisteren's waarden tonen als referentie
         yesterday_str = (today - timedelta(days=1)).isoformat()
         cursor = await db.execute(
-            "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, te.value FROM trackers t "
+            "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, t.threshold_direction, te.value FROM trackers t "
             "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
             "WHERE t.active = 1 ORDER BY t.sort_order, t.id",
             (yesterday_str,),
@@ -284,7 +284,7 @@ async def weekreview_page(request: Request):
         day_labels = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"]
 
         cursor = await db.execute(
-            "SELECT id, name, unit, type, threshold_green, threshold_red FROM trackers WHERE active = 1 ORDER BY sort_order, id"
+            "SELECT id, name, unit, type, threshold_green, threshold_red, threshold_direction FROM trackers WHERE active = 1 ORDER BY sort_order, id"
         )
         tracker_rows = await cursor.fetchall()
 
@@ -302,6 +302,7 @@ async def weekreview_page(request: Request):
                 "type": t["type"],
                 "threshold_green": t["threshold_green"],
                 "threshold_red": t["threshold_red"],
+                "threshold_direction": t["threshold_direction"],
                 "values": [entries.get(d) for d in week_dates],
             })
 
@@ -654,7 +655,7 @@ async def delete_daily_task(task_id: int):
 async def trackers_page(request: Request):
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT * FROM trackers ORDER BY sort_order, id")
+        cursor = await db.execute("SELECT id, name, unit, type, active, sort_order, threshold_green, threshold_red, threshold_direction FROM trackers ORDER BY sort_order, id")
         all_trackers = [dict(r) for r in await cursor.fetchall()]
 
         return templates.TemplateResponse(request, "trackers.html", {"trackers": all_trackers})
@@ -695,9 +696,10 @@ async def update_thresholds(tracker_id: int, request: Request):
     red = form.get("threshold_red")
     db = await get_db()
     try:
+        direction = form.get("threshold_direction", "higher")
         await db.execute(
-            "UPDATE trackers SET threshold_green = ?, threshold_red = ? WHERE id = ?",
-            (float(green) if green else None, float(red) if red else None, tracker_id),
+            "UPDATE trackers SET threshold_green = ?, threshold_red = ?, threshold_direction = ? WHERE id = ?",
+            (float(green) if green else None, float(red) if red else None, direction, tracker_id),
         )
         await db.commit()
         return JSONResponse({"ok": True})

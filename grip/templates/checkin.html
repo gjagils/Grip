@@ -71,9 +71,15 @@
     <div class="tracker-list">
         {% for t in trackers %}
         {% if t.value is not none and t.threshold_green is not none and t.threshold_red is not none %}
-            {% if t.value >= t.threshold_green %}{% set color_class = 'tracker-green' %}
-            {% elif t.value < t.threshold_red %}{% set color_class = 'tracker-red' %}
-            {% else %}{% set color_class = 'tracker-orange' %}{% endif %}
+            {% if t.threshold_direction == 'lower' %}
+                {% if t.value <= t.threshold_green %}{% set color_class = 'tracker-green' %}
+                {% elif t.value > t.threshold_red %}{% set color_class = 'tracker-red' %}
+                {% else %}{% set color_class = 'tracker-orange' %}{% endif %}
+            {% else %}
+                {% if t.value >= t.threshold_green %}{% set color_class = 'tracker-green' %}
+                {% elif t.value < t.threshold_red %}{% set color_class = 'tracker-red' %}
+                {% else %}{% set color_class = 'tracker-orange' %}{% endif %}
+            {% endif %}
         {% else %}{% set color_class = '' %}{% endif %}
         <div class="tracker-item {{ color_class }}">
             <div class="tracker-info">
