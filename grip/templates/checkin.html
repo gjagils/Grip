@@ -4,9 +4,11 @@
 {% block title %}Check-in — Grip{% endblock %}
 
 {% block content %}
-<h1><span class="doodle-underline">Check-in</span></h1>
-<div class="page-accent page-accent-orange"></div>
-<p style="color: var(--text-muted); margin-bottom: 1.5rem; font-style: italic;">{{ today }}</p>
+<div class="page-header">
+    <span class="page-header-kicker">{{ today }}</span>
+    <h2 class="page-header-title">Dagelijkse Check-in</h2>
+    <p class="page-header-sub">Hoe voel je je vandaag echt?</p>
+</div>
 
 {% if already_done %}
 <div class="card" style="border-left: 3px solid var(--success);">

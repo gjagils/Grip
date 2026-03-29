@@ -4,68 +4,77 @@
 {% block title %}Grip — Dashboard{% endblock %}
 
 {% block content %}
-<h1><span class="doodle-underline">Grip</span></h1>
-<div class="page-accent page-accent-orange"></div>
-
-{% if streak > 0 %}
-<div class="card card-doodle">
-    <div class="streak">
-        <span class="streak-fire">&#x1F525;</span>
-        <span>{{ streak }} dag{% if streak != 1 %}en{% endif %} streak!</span>
-    </div>
+<div class="page-header" style="position: relative;">
+    <h2 class="page-header-title" id="greeting-text">Klaar voor actie?</h2>
+    <span class="page-header-kicker" id="greeting-kicker" style="position: absolute; top: -0.5rem; right: 0; transform: rotate(4deg);">Laten we beginnen!</span>
 </div>
-{% endif %}
 
 <div class="quick-actions">
     <a href="/checkin" class="quick-action">
         <div class="quick-action-icon">
-            {% if has_checkin %}&#x2705;{% else %}&#x270F;&#xFE0F;{% endif %}
+            <span class="material-symbols-outlined" style="color: var(--orange-container); font-size: 1.6rem;">{% if has_checkin %}task_alt{% else %}stylus_pencil{% endif %}</span>
         </div>
-        <div class="quick-action-label">
-            {% if has_checkin %}Check-in gedaan{% else %}Check-in{% endif %}
-        </div>
+        <span class="quick-action-label">{% if has_checkin %}Check-in ✓{% else %}Check-in{% endif %}</span>
     </a>
     <a href="/weekreview" class="quick-action">
         <div class="quick-action-icon">
-            {% if has_week_review %}&#x2705;{% else %}&#x1F4CB;{% endif %}
+            <span class="material-symbols-outlined" style="color: var(--orange-container); font-size: 1.6rem;">{% if has_week_review %}task_alt{% else %}content_paste{% endif %}</span>
         </div>
-        <div class="quick-action-label">
-            {% if has_week_review %}Week {{ week }} gedaan{% else %}Weekreview{% endif %}
-        </div>
+        <span class="quick-action-label">{% if has_week_review %}Week {{ week }} ✓{% else %}Weekreview{% endif %}</span>
     </a>
 </div>
 
-{% if goals %}
-<div class="card">
-    <div class="card-header">
-        <h2>&#x1F3AF; Actieve doelen</h2>
-        <a href="/goals" class="btn btn-small btn-secondary">Bekijk alle</a>
-    </div>
-    {% for goal in goals[:5] %}
-    <div class="goal-item">
-        <div>
-            <div class="goal-title">{{ goal.title }}</div>
-            <div class="goal-meta">
-                {{ goal.type }} {{ goal.year }}{% if goal.quarter %} {{ goal.quarter }}{% endif %}
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-</div>
-{% else %}
-<div class="card card-doodle">
-    <div class="empty-state">
-        <p>Nog geen doelen ingesteld</p>
-        <p style="margin-top: 0.5rem; font-size: 0.9rem;">Begin met je jaar- en kwartaaldoelen!</p>
-        <a href="/goals" class="btn btn-small btn-primary" style="margin-top: 1rem; display: inline-flex;">Doelen toevoegen</a>
+{% if streak > 0 %}
+<div class="card" style="text-align: center; padding: 1rem;">
+    <div class="streak">
+        <span class="streak-fire">🔥</span>
+        <span>{{ streak }} dag{% if streak != 1 %}en{% endif %} streak</span>
     </div>
 </div>
 {% endif %}
 
-<div class="card">
-    <div class="card-header">
-        <h2>&#x1F4C5; Geschiedenis</h2>
+<div class="card" style="text-align: center;">
+    <div style="width: 2.75rem; height: 2.75rem; background: rgba(159,66,8,0.08); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;">
+        <span class="material-symbols-outlined" style="color: var(--orange);">track_changes</span>
     </div>
-    <a href="/checkin/history" class="btn btn-secondary btn-small" style="width: 100%;">Bekijk check-in geschiedenis</a>
+    <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem;">Huidige doelen</h3>
+    {% if goals %}
+    {% for goal in goals[:3] %}
+    <p style="color: var(--text-muted); font-size: 0.875rem; padding: 0.2rem 0;">{{ goal.title }}</p>
+    {% endfor %}
+    {% if goals|length > 3 %}<p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem;">+{{ goals|length - 3 }} meer</p>{% endif %}
+    <a href="/goals" class="btn btn-primary" style="margin-top: 1rem; display: block;">Bekijk doelen</a>
+    {% else %}
+    <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic; padding: 0.5rem 0;">Nog geen doelen ingesteld</p>
+    <a href="/goals" class="btn btn-primary" style="margin-top: 0.75rem; display: block;">Doelen toevoegen</a>
+    {% endif %}
 </div>
+
+<a href="/checkin/history" class="card" style="display: flex; align-items: center; gap: 1rem; text-decoration: none; color: inherit; padding: 1rem 1.25rem;">
+    <div style="background: var(--surface-low); padding: 0.6rem; border-radius: 10px; flex-shrink: 0;">
+        <span class="material-symbols-outlined" style="color: var(--orange-container);">calendar_month</span>
+    </div>
+    <div style="flex: 1;">
+        <div style="font-weight: 700;">Geschiedenis</div>
+        <div class="section-label" style="margin: 0;">Overzicht van voortgang</div>
+    </div>
+    <span class="material-symbols-outlined" style="color: var(--text-muted); font-size: 1.1rem;">arrow_forward</span>
+</a>
+
+<div class="quote-block">
+    <p class="quote-text">Focus is niet het zeggen van ja tegen hetgeen waar je je op richt. Het is het zeggen van nee tegen de honderd andere goede ideeën die er zijn.</p>
+    <span class="quote-author">– Steve Jobs</span>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const hour = new Date().getHours();
+const kickers = ['Goedemorgen!', 'Goedemiddag!', 'Goedenavond!'];
+const greetings = ['Klaar voor de dag?', 'Klaar voor actie?', 'Tijd voor reflectie?'];
+const idx = hour < 12 ? 0 : hour < 17 ? 1 : 2;
+document.getElementById('greeting-kicker').textContent = kickers[idx];
+document.getElementById('greeting-text').textContent = greetings[idx];
+</script>
 {% endblock %}

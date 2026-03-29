@@ -71,9 +71,9 @@ body {
 
 .app-logo {
     font-family: var(--handwritten);
-    font-size: 1.7rem;
+    font-size: 2rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--orange);
     letter-spacing: -0.5px;
 }
 
@@ -156,6 +156,14 @@ nav a:hover {
 nav a svg {
     width: 22px;
     height: 22px;
+}
+
+.nav-icon {
+    font-size: 24px;
+}
+
+.filled {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
 /* Headers — hand-drawn feel */
@@ -398,6 +406,9 @@ textarea {
     color: white;
     border-color: transparent;
     box-shadow: 0 4px 16px rgba(159,66,8,0.28);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.85rem;
 }
 
 .btn-primary:hover {
@@ -610,35 +621,52 @@ textarea {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
 }
 
 .quick-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
     background: var(--surface);
-    border: 2px solid var(--border-sketch);
-    border-radius: 14px;
-    padding: 1.25rem 1rem;
+    border-radius: 18px;
     text-decoration: none;
     color: var(--text);
-    text-align: center;
-    transition: all 0.2s;
-    box-shadow: 2px 3px 0 var(--border);
+    transition: all 0.15s;
+    border: 1px solid var(--border);
 }
 
 .quick-action:hover {
-    border-color: var(--orange);
+    background: var(--surface-low);
     transform: translateY(-1px);
-    box-shadow: 3px 4px 0 var(--border);
+    box-shadow: 0 4px 16px rgba(80,28,0,0.08);
 }
 
 .quick-action-icon {
-    font-size: 1.8rem;
-    margin-bottom: 0.4rem;
+    width: 3.25rem;
+    height: 3.25rem;
+    background: var(--surface-2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    font-size: 1.5rem;
+    transition: background 0.15s;
+}
+
+.quick-action:hover .quick-action-icon {
+    background: rgba(159,66,8,0.1);
 }
 
 .quick-action-label {
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text);
 }
 
 /* Doodle arrow decoration — use as background on specific sections */
@@ -706,6 +734,66 @@ details summary:hover {
 
 .page-accent-blue {
     background: linear-gradient(90deg, var(--blue), var(--blue-medium), transparent);
+}
+
+/* Page header component */
+.page-header {
+    margin-bottom: 2rem;
+    padding-top: 0.25rem;
+    position: relative;
+}
+.page-header-kicker {
+    font-family: var(--handwritten);
+    color: var(--orange-container);
+    font-size: 1.15rem;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.1rem;
+}
+.page-header-title {
+    font-family: var(--body);
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+    color: var(--text);
+    margin: 0 0 0.3rem;
+}
+.page-header-sub {
+    font-family: var(--handwritten);
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1.3;
+}
+
+/* Section label */
+.section-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+    display: block;
+}
+
+/* Quote block */
+.quote-block {
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+}
+.quote-text {
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+    font-style: italic;
+    margin-bottom: 0.5rem;
+}
+.quote-author {
+    font-family: var(--handwritten);
+    color: var(--orange);
+    font-size: 1.3rem;
 }
 
 /* Task items — used in goals and daily check-in */
