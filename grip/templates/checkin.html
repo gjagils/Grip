@@ -42,7 +42,7 @@
             <h2>📊 Hoe was gisteren?</h2>
             <a href="/trackers" class="btn btn-small btn-secondary" style="font-size: 0.7rem;">Beheer</a>
         </div>
-        <div class="tracker-list">
+        <div class="tracker-grid">
             {% for t in trackers %}
             {% if t.value is not none and t.threshold_green is not none and t.threshold_red is not none %}
                 {% if t.threshold_direction == 'lower' %}
@@ -55,29 +55,33 @@
                     {% else %}{% set color_class = 'tracker-orange' %}{% set smiley = '😐' %}{% endif %}
                 {% endif %}
             {% else %}{% set color_class = '' %}{% set smiley = '' %}{% endif %}
-            <div class="tracker-item {{ color_class }}">
-                <div class="tracker-item-top">
-                    <div class="tracker-info">
-                        <span class="tracker-name">{{ t.name }}</span>
-                        {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        {% if smiley %}<span style="font-size: 1.1rem;">{{ smiley }}</span>{% endif %}
-                        {% if t.type == 'boolean' %}
-                        <input type="checkbox" name="tracker_{{ t.id }}" value="1"
-                               {% if t.value == 1.0 %}checked{% endif %}
-                               style="width: 1.2rem; height: 1.2rem;">
-                        {% else %}
-                        <input type="number" name="tracker_{{ t.id }}"
-                               value="{{ t.value|int if t.value is not none else '' }}"
-                               placeholder="–" step="any"
-                               class="tracker-edit-input">
-                        {% endif %}
-                    </div>
+            <div class="tracker-row {{ color_class }}"
+                 data-green="{{ t.threshold_green if t.threshold_green is not none else '' }}"
+                 data-red="{{ t.threshold_red if t.threshold_red is not none else '' }}"
+                 data-dir="{{ t.threshold_direction }}">
+                <div class="tracker-row-label">
+                    <span class="tracker-name">{{ t.name }}</span>
+                    {% if t.unit %}<span class="tracker-unit"> ({{ t.unit }})</span>{% endif %}
                 </div>
-                <textarea name="tracker_note_{{ t.id }}" rows="1"
-                          placeholder="Opmerking (optioneel)..."
-                          class="tracker-note-input">{{ t.note if t.note else '' }}</textarea>
+                <div class="tracker-row-input">
+                    <span class="tracker-smiley">{{ smiley }}</span>
+                    {% if t.type == 'boolean' %}
+                    <input type="checkbox" name="tracker_{{ t.id }}" value="1"
+                           {% if t.value == 1.0 %}checked{% endif %}
+                           class="tracker-bool-check"
+                           onchange="updateTrackerRow(this.closest('.tracker-row'))">
+                    {% else %}
+                    <input type="number" name="tracker_{{ t.id }}"
+                           value="{{ t.value|int if t.value is not none else '' }}"
+                           placeholder="–" step="any"
+                           class="tracker-edit-input"
+                           oninput="updateTrackerRow(this.closest('.tracker-row'))">
+                    {% endif %}
+                </div>
+                <input type="text" name="tracker_note_{{ t.id }}"
+                       value="{{ t.note if t.note else '' }}"
+                       placeholder="Opmerking..."
+                       class="tracker-note-input">
             </div>
             {% endfor %}
         </div>
@@ -195,6 +199,44 @@
 
 {% block scripts %}
 <script>
+function updateTrackerRow(row) {
+    const green = parseFloat(row.dataset.green);
+    const red = parseFloat(row.dataset.red);
+    const dir = row.dataset.dir;
+    const numInput = row.querySelector('input[type=number]');
+    const boolInput = row.querySelector('input[type=checkbox]');
+    const smileyEl = row.querySelector('.tracker-smiley');
+
+    if (isNaN(green) || isNaN(red)) return;
+
+    let val;
+    if (boolInput) {
+        val = boolInput.checked ? 1 : 0;
+    } else {
+        val = parseFloat(numInput.value);
+        if (isNaN(val)) {
+            smileyEl.textContent = '';
+            row.classList.remove('tracker-green', 'tracker-orange', 'tracker-red');
+            return;
+        }
+    }
+
+    let emoji, cls;
+    if (dir === 'lower') {
+        if (val <= green)      { emoji = '😊'; cls = 'tracker-green'; }
+        else if (val > red)    { emoji = '😟'; cls = 'tracker-red'; }
+        else                   { emoji = '😐'; cls = 'tracker-orange'; }
+    } else {
+        if (val >= green)      { emoji = '😊'; cls = 'tracker-green'; }
+        else if (val < red)    { emoji = '😟'; cls = 'tracker-red'; }
+        else                   { emoji = '😐'; cls = 'tracker-orange'; }
+    }
+
+    smileyEl.textContent = emoji;
+    row.classList.remove('tracker-green', 'tracker-orange', 'tracker-red');
+    row.classList.add(cls);
+}
+
 // Claude's vraag ophalen bij laden (alleen als nog niet beschikbaar)
 {% if not (existing and existing.claude_question) %}
 async function loadClaudeQuestion() {

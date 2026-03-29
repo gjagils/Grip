@@ -10,8 +10,15 @@
     <link rel="stylesheet" href="/static/style.css">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap">
 </head>
 <body>
+    <header class="app-header">
+        <span class="app-logo">Grip</span>
+        <a href="/trackers" class="app-header-icon" title="Trackers">
+            <span class="material-symbols-outlined">bar_chart</span>
+        </a>
+    </header>
     <div class="container">
         {% block content %}{% endblock %}
     </div>
