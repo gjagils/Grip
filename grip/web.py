@@ -1153,12 +1153,17 @@ async def reflect_quarterly_api(request: Request):
 
 # Veldnaam → (tracker naam, eenheid, type)
 _HEALTH_FIELDS = {
-    "steps":            ("Stappen",             "stappen", "number"),
-    "active_calories":  ("Actieve calorieën",   "kcal",    "number"),
-    "exercise_minutes": ("Beweegminuten",        "min",     "number"),
-    "stand_hours":      ("Staande uren",         "uur",     "number"),
-    "sleep_hours":      ("Slaap",                "uur",     "number"),
-    "distance_km":      ("Afstand",              "km",      "number"),
+    "steps":              ("Stappen",               "stappen", "number"),
+    "active_calories":    ("Actieve calorieën",     "kcal",    "number"),
+    "calories":           ("Actieve calorieën",     "kcal",    "number"),  # alias
+    "kcal":               ("Actieve calorieën",     "kcal",    "number"),  # alias
+    "energy":             ("Actieve calorieën",     "kcal",    "number"),  # alias
+    "dietary_calories":   ("Gegeten calorieën",     "kcal",    "number"),
+    "food_calories":      ("Gegeten calorieën",     "kcal",    "number"),  # alias
+    "exercise_minutes":   ("Beweegminuten",         "min",     "number"),
+    "stand_hours":        ("Staande uren",           "uur",     "number"),
+    "sleep_hours":        ("Slaap",                  "uur",     "number"),
+    "distance_km":        ("Afstand",                "km",      "number"),
 }
 
 
