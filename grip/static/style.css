@@ -1300,6 +1300,49 @@ details summary:hover {
     transform: none;
 }
 
+/* ── Tracker kleurcodering ── */
+
+.tracker-item.tracker-green { border-left: 3px solid var(--success); }
+.tracker-item.tracker-orange { border-left: 3px solid #f0a500; }
+.tracker-item.tracker-red { border-left: 3px solid var(--danger); }
+
+.tracker-week-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.tracker-week-table th {
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.35rem 0.4rem;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+}
+
+.tracker-week-table th:first-child { text-align: left; }
+
+.tracker-week-table td {
+    text-align: center;
+    padding: 0.4rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+}
+
+.tracker-week-name {
+    text-align: left !important;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    padding-right: 0.75rem !important;
+}
+
+.cell-green { background: #5cb85c18; color: #3a7d3a; font-weight: 600; border-radius: 4px; }
+.cell-orange { background: #f0a50018; color: #a06800; font-weight: 600; border-radius: 4px; }
+.cell-red { background: #d9534f18; color: #a02020; font-weight: 600; border-radius: 4px; }
+.cell-empty { color: var(--text-muted); }
+
 /* ── Kwartaalreview ── */
 
 .quarterly-header {

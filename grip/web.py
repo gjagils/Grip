@@ -123,7 +123,7 @@ async def checkin_page(request: Request):
         # Actieve trackers — gisteren's waarden tonen als referentie
         yesterday_str = (today - timedelta(days=1)).isoformat()
         cursor = await db.execute(
-            "SELECT t.id, t.name, t.unit, t.type, te.value FROM trackers t "
+            "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, te.value FROM trackers t "
             "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
             "WHERE t.active = 1 ORDER BY t.sort_order, t.id",
             (yesterday_str,),
@@ -278,6 +278,33 @@ async def weekreview_page(request: Request):
         )
         weekly_insight = await cursor.fetchone()
 
+        # Tracker weekdata (ma t/m zo van huidige week)
+        week_start = (now - timedelta(days=now.weekday())).date()
+        week_dates = [(week_start + timedelta(days=i)).isoformat() for i in range(7)]
+        day_labels = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"]
+
+        cursor = await db.execute(
+            "SELECT id, name, unit, type, threshold_green, threshold_red FROM trackers WHERE active = 1 ORDER BY sort_order, id"
+        )
+        tracker_rows = await cursor.fetchall()
+
+        tracker_week = []
+        for t in tracker_rows:
+            cursor = await db.execute(
+                "SELECT date, value FROM tracker_entries WHERE tracker_id = ? AND date >= ? AND date <= ?",
+                (t["id"], week_dates[0], week_dates[-1]),
+            )
+            entries = {r["date"]: r["value"] for r in await cursor.fetchall()}
+            tracker_week.append({
+                "id": t["id"],
+                "name": t["name"],
+                "unit": t["unit"],
+                "type": t["type"],
+                "threshold_green": t["threshold_green"],
+                "threshold_red": t["threshold_red"],
+                "values": [entries.get(d) for d in week_dates],
+            })
+
         return templates.TemplateResponse(
             request,
             "weekreview.html",
@@ -287,6 +314,9 @@ async def weekreview_page(request: Request):
                 "week": week,
                 "existing": dict(existing) if existing else None,
                 "weekly_insight": weekly_insight["response"] if weekly_insight else None,
+                "tracker_week": tracker_week,
+                "week_dates": week_dates,
+                "day_labels": day_labels,
             },
         )
     finally:
@@ -654,6 +684,23 @@ async def create_tracker(request: Request):
         )
         await db.commit()
         return RedirectResponse("/trackers", status_code=303)
+    finally:
+        await db.close()
+
+
+@app.post("/api/trackers/{tracker_id}/thresholds")
+async def update_thresholds(tracker_id: int, request: Request):
+    form = await request.form()
+    green = form.get("threshold_green")
+    red = form.get("threshold_red")
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE trackers SET threshold_green = ?, threshold_red = ? WHERE id = ?",
+            (float(green) if green else None, float(red) if red else None, tracker_id),
+        )
+        await db.commit()
+        return JSONResponse({"ok": True})
     finally:
         await db.close()
 

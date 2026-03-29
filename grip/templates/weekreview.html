@@ -61,6 +61,39 @@
     <button type="submit" class="btn btn-primary">Weekreview opslaan</button>
 </form>
 
+{% if tracker_week %}
+<div class="card" style="margin-top: 1.5rem; overflow-x: auto;">
+    <h2 style="margin-bottom: 1rem;">📊 Trackers deze week</h2>
+    <table class="tracker-week-table">
+        <thead>
+            <tr>
+                <th>Tracker</th>
+                {% for label in day_labels %}<th>{{ label }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tracker_week %}
+            <tr>
+                <td class="tracker-week-name">{{ t.name }}{% if t.unit %} <span class="tracker-unit">({{ t.unit }})</span>{% endif %}</td>
+                {% for val in t.values %}
+                {% if val is not none %}
+                    {% if t.threshold_green is not none and t.threshold_red is not none %}
+                        {% if val >= t.threshold_green %}{% set cell_class = 'cell-green' %}
+                        {% elif val < t.threshold_red %}{% set cell_class = 'cell-red' %}
+                        {% else %}{% set cell_class = 'cell-orange' %}{% endif %}
+                    {% else %}{% set cell_class = '' %}{% endif %}
+                    <td class="{{ cell_class }}">{{ val|int if t.type == 'number' else '✓' }}</td>
+                {% else %}
+                    <td class="cell-empty">–</td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
 {% if existing %}
 <div style="margin-top: 1.5rem;">
     {% if weekly_insight %}

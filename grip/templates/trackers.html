@@ -23,9 +23,24 @@
             <button class="btn btn-small btn-secondary" onclick="toggleTracker({{ t.id }})">
                 {{ 'Pauzeer' if t.active else 'Activeer' }}
             </button>
+            <button class="btn btn-small btn-secondary" onclick="toggleThresholds({{ t.id }})">🎯</button>
             <button class="btn btn-small btn-danger" onclick="deleteTracker({{ t.id }})">&#x1F5D1;</button>
         </div>
     </div>
+    {% if t.type == 'number' %}
+    <div class="threshold-form" id="thresholds-{{ t.id }}" style="display:none; padding: 0.75rem 0 0.5rem; border-top: 1px solid var(--border);">
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.5rem;">🟢 groen ≥ X &nbsp;|&nbsp; 🔴 rood &lt; Y &nbsp;|&nbsp; 🟠 oranje daartussen</p>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="number" id="green-{{ t.id }}" placeholder="Groen ≥" step="any"
+                   value="{{ t.threshold_green if t.threshold_green is not none else '' }}"
+                   style="flex: 1; padding: 0.4rem 0.6rem; border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.85rem;">
+            <input type="number" id="red-{{ t.id }}" placeholder="Rood <" step="any"
+                   value="{{ t.threshold_red if t.threshold_red is not none else '' }}"
+                   style="flex: 1; padding: 0.4rem 0.6rem; border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.85rem;">
+            <button class="btn btn-small btn-primary" onclick="saveThresholds({{ t.id }})">Opslaan</button>
+        </div>
+    </div>
+    {% endif %}
     {% endfor %}
 </div>
 {% endif %}
@@ -76,6 +91,21 @@ async function deleteTracker(trackerId) {
     if (!confirm('Tracker verwijderen? Alle bijbehorende data wordt ook verwijderd.')) return;
     await fetch(`/api/trackers/${trackerId}`, { method: 'DELETE' });
     document.getElementById(`tracker-${trackerId}`).remove();
+}
+
+function toggleThresholds(trackerId) {
+    const el = document.getElementById(`thresholds-${trackerId}`);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveThresholds(trackerId) {
+    const green = document.getElementById(`green-${trackerId}`).value;
+    const red = document.getElementById(`red-${trackerId}`).value;
+    const form = new FormData();
+    if (green) form.append('threshold_green', green);
+    if (red) form.append('threshold_red', red);
+    await fetch(`/api/trackers/${trackerId}/thresholds`, { method: 'POST', body: form });
+    document.getElementById(`thresholds-${trackerId}`).style.display = 'none';
 }
 </script>
 {% endblock %}
