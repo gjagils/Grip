@@ -128,6 +128,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS quarterly_goal_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quarterly_review_id INTEGER NOT NULL REFERENCES quarterly_reviews(id) ON DELETE CASCADE,
+    goal_id INTEGER NOT NULL REFERENCES goals(id),
+    achieved INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    UNIQUE(quarterly_review_id, goal_id)
+);
+
 CREATE TABLE IF NOT EXISTS quarterly_reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     year INTEGER NOT NULL,

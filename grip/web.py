@@ -926,10 +926,29 @@ async def quarterly_page(request: Request):
         existing = await cursor.fetchone()
         existing = dict(existing) if existing else None
 
+        # Kwartaaldoelen van dit kwartaal (voor stap 2 review)
+        quarter_label = f"Q{quarter}"
+        cursor = await db.execute(
+            "SELECT id, title, description FROM goals WHERE status IN ('active','completed') AND type = 'quarterly' AND year = ? AND quarter = ? ORDER BY id",
+            (year, quarter_label),
+        )
+        quarterly_goals = [dict(g) for g in await cursor.fetchall()]
+
+        # Alle actieve doelen (voor stap 2 algemeen)
         cursor = await db.execute(
             "SELECT id, title, type, status FROM goals WHERE status = 'active' ORDER BY type, year, quarter"
         )
-        goals = [dict(g) for g in await cursor.fetchall()]
+        all_goals = [dict(g) for g in await cursor.fetchall()]
+
+        # Bestaande per-doel reviews laden
+        goal_reviews = {}
+        if existing:
+            cursor = await db.execute(
+                "SELECT goal_id, achieved, note FROM quarterly_goal_reviews WHERE quarterly_review_id = ?",
+                (existing["id"],),
+            )
+            for r in await cursor.fetchall():
+                goal_reviews[r["goal_id"]] = {"achieved": r["achieved"], "note": r["note"]}
 
         return templates.TemplateResponse(
             request,
@@ -938,8 +957,11 @@ async def quarterly_page(request: Request):
                 "active_nav": "quarterly",
                 "year": year,
                 "quarter": quarter,
+                "quarter_label": quarter_label,
                 "existing": existing,
-                "goals": goals,
+                "quarterly_goals": quarterly_goals,
+                "all_goals": all_goals,
+                "goal_reviews": goal_reviews,
             },
         )
     finally:
@@ -955,7 +977,7 @@ async def save_quarterly(request: Request):
 
     db = await get_db()
     try:
-        await db.execute(
+        cursor = await db.execute(
             """INSERT INTO quarterly_reviews (
                 year, quarter,
                 highlights_proud, highlights_bad, goals_review,
@@ -995,6 +1017,70 @@ async def save_quarterly(request: Request):
                 form.get("outlook"),
             ),
         )
+
+        # Haal review ID op
+        cursor = await db.execute(
+            "SELECT id FROM quarterly_reviews WHERE year = ? AND quarter = ?", (year, quarter)
+        )
+        review_row = await cursor.fetchone()
+        review_id = review_row["id"]
+
+        # Sla per-doel reviews op
+        for key, value in form.multi_items():
+            if key.startswith("goal_done_"):
+                goal_id = int(key.split("_")[2])
+                note = form.get(f"goal_note_{goal_id}", "")
+                await db.execute(
+                    """INSERT INTO quarterly_goal_reviews (quarterly_review_id, goal_id, achieved, note)
+                       VALUES (?, ?, 1, ?)
+                       ON CONFLICT(quarterly_review_id, goal_id) DO UPDATE SET achieved = 1, note = excluded.note""",
+                    (review_id, goal_id, note),
+                )
+        # Niet-aangevinkte doelen opslaan als niet gehaald
+        for key in form.keys():
+            if key.startswith("goal_present_"):
+                goal_id = int(key.split("_")[2])
+                if not form.get(f"goal_done_{goal_id}"):
+                    note = form.get(f"goal_note_{goal_id}", "")
+                    await db.execute(
+                        """INSERT INTO quarterly_goal_reviews (quarterly_review_id, goal_id, achieved, note)
+                           VALUES (?, ?, 0, ?)
+                           ON CONFLICT(quarterly_review_id, goal_id) DO UPDATE SET achieved = 0, note = excluded.note""",
+                        (review_id, goal_id, note),
+                    )
+
+        # Nieuwe doelen aanmaken voor volgend kwartaal
+        next_quarter = quarter + 1 if quarter < 4 else 1
+        next_year = year if quarter < 4 else year + 1
+        next_quarter_label = f"Q{next_quarter}"
+        for key in form.keys():
+            if key.startswith("new_goal_"):
+                title = form.get(key, "").strip()
+                if title:
+                    goal_id_str = key.split("_")[2]
+                    # Bestaand doel updaten
+                    if goal_id_str.isdigit():
+                        await db.execute(
+                            "UPDATE goals SET title = ? WHERE id = ?",
+                            (title, int(goal_id_str)),
+                        )
+                    else:
+                        # Nieuw doel aanmaken
+                        await db.execute(
+                            """INSERT INTO goals (title, type, quarter, year, status)
+                               VALUES (?, 'quarterly', ?, ?, 'active')""",
+                            (title, next_quarter_label, next_year),
+                        )
+        # Verwijderde bestaande doelen markeren als abandoned
+        for key in form.keys():
+            if key.startswith("goal_keep_"):
+                goal_id = int(key.split("_")[2])
+                kept_title = form.get(f"new_goal_{goal_id}", "").strip()
+                if not kept_title:
+                    await db.execute(
+                        "UPDATE goals SET status = 'abandoned' WHERE id = ?", (goal_id,)
+                    )
+
         await db.commit()
         return RedirectResponse("/quarterly", status_code=303)
     finally:

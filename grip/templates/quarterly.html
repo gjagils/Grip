@@ -46,22 +46,33 @@
         <h2 class="quarterly-step-title">Terugkijken op je doelen</h2>
         <p class="quarterly-step-hint">Per doel: Heb je het bereikt? Heb je er alles aan gedaan? Ben je het uit het oog verloren? Hoe kwam dat?</p>
 
-        {% if goals %}
-        <div class="quarterly-goals-ref">
-            <div class="quarterly-goals-ref-label">Je actieve doelen</div>
-            {% for g in goals %}
-            <div class="quarterly-goal-item">
-                <span class="quarterly-goal-type">{{ g.type }}</span>
-                {{ g.title }}
+        {% if quarterly_goals %}
+            {% for g in quarterly_goals %}
+            {% set gr = goal_reviews.get(g.id, {}) %}
+            <div class="card quarterly-goal-review-card">
+                <input type="hidden" name="goal_present_{{ g.id }}" value="1">
+                <div class="quarterly-goal-review-title">{{ g.title }}</div>
+                <div class="quarterly-goal-review-row">
+                    <label class="goal-done-check">
+                        <input type="checkbox" name="goal_done_{{ g.id }}" value="1"
+                               {% if gr.get('achieved') %}checked{% endif %}>
+                        <span>Gehaald ✓</span>
+                    </label>
+                </div>
+                <textarea name="goal_note_{{ g.id }}" rows="2"
+                          placeholder="Wat ging goed? Wat niet? Waarom?">{{ gr.get('note', '') or '' }}</textarea>
             </div>
             {% endfor %}
+        {% else %}
+        <div class="quarterly-goals-ref" style="color: var(--text-muted); font-size: 0.875rem;">
+            Nog geen kwartaaldoelen voor Q{{ quarter }} {{ year }}. Voeg ze toe via <a href="/goals">Doelen</a>.
         </div>
         {% endif %}
 
         <div class="card">
             <div class="form-group">
-                <label>Reflectie per doel</label>
-                <textarea name="goals_review" rows="6" placeholder="Doel 1: ...&#10;Doel 2: ...">{{ existing.goals_review if existing else '' }}</textarea>
+                <label style="color: var(--text-muted); font-size: 0.85rem;">Algemene reflectie (optioneel)</label>
+                <textarea name="goals_review" rows="3" placeholder="Aanvullende opmerkingen...">{{ existing.goals_review if existing else '' }}</textarea>
             </div>
         </div>
     </div>
@@ -114,12 +125,32 @@
     <div class="quarterly-step">
         <div class="quarterly-step-label">Stap 5</div>
         <h2 class="quarterly-step-title">Nieuwe doelen Q{{ quarter + 1 if quarter < 4 else 1 }} {{ year if quarter < 4 else year + 1 }}</h2>
-        <p class="quarterly-step-hint">Wat wil je de komende drie maanden bereiken?</p>
+        <p class="quarterly-step-hint">Bewerk, verwijder of behoud je huidige doelen. Voeg nieuwe toe via de + knop.</p>
 
-        <div class="card">
+        <div id="new-goals-list">
+            {% if quarterly_goals %}
+                {% for g in quarterly_goals %}
+                <div class="card new-goal-row" id="new-goal-row-{{ g.id }}">
+                    <input type="hidden" name="goal_keep_{{ g.id }}" value="1">
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="text" name="new_goal_{{ g.id }}"
+                               value="{{ g.title }}"
+                               placeholder="Doeltitel..." style="flex: 1;">
+                        <button type="button" class="btn btn-small btn-danger"
+                                onclick="removeGoalRow('new-goal-row-{{ g.id }}')">✕</button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+
+        <button type="button" class="btn btn-secondary" style="width: 100%; margin-bottom: 0.5rem;"
+                onclick="addNewGoalRow()">+ Nieuw doel toevoegen</button>
+
+        <div class="card" style="margin-top: 0.5rem;">
             <div class="form-group">
-                <label>Doelen voor volgend kwartaal</label>
-                <textarea name="new_goals" rows="5" placeholder="- &#10;- &#10;- ">{{ existing.new_goals if existing else '' }}</textarea>
+                <label style="color: var(--text-muted); font-size: 0.85rem;">Aanvullende notities (optioneel)</label>
+                <textarea name="new_goals" rows="3" placeholder="Toelichting bij je doelen...">{{ existing.new_goals if existing else '' }}</textarea>
             </div>
         </div>
     </div>
@@ -163,6 +194,29 @@
 
 {% block scripts %}
 <script>
+let newGoalCounter = 0;
+
+function addNewGoalRow() {
+    newGoalCounter++;
+    const list = document.getElementById('new-goals-list');
+    const div = document.createElement('div');
+    div.className = 'card new-goal-row';
+    div.id = `new-goal-row-new-${newGoalCounter}`;
+    div.innerHTML = `
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="text" name="new_goal_new_${newGoalCounter}"
+                   placeholder="Nieuw doel..." style="flex: 1;">
+            <button type="button" class="btn btn-small btn-danger"
+                    onclick="removeGoalRow('new-goal-row-new-${newGoalCounter}')">✕</button>
+        </div>`;
+    list.appendChild(div);
+}
+
+function removeGoalRow(rowId) {
+    const el = document.getElementById(rowId);
+    if (el) el.remove();
+}
+
 async function askClaude() {
     const btn = document.getElementById('claude-btn');
     const loading = document.getElementById('claude-loading');
