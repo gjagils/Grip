@@ -116,6 +116,32 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     content TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS quarterly_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    year INTEGER NOT NULL,
+    quarter INTEGER NOT NULL CHECK (quarter IN (1, 2, 3, 4)),
+    highlights_proud TEXT,
+    highlights_bad TEXT,
+    goals_review TEXT,
+    cat_werk TEXT,
+    cat_relatie TEXT,
+    cat_familie TEXT,
+    cat_vrienden TEXT,
+    cat_gezondheid TEXT,
+    cat_vaardigheden TEXT,
+    cat_sideprojects TEXT,
+    cat_plezier TEXT,
+    cat_geld_inkomen TEXT,
+    cat_geld_sparen TEXT,
+    cat_geld_geven TEXT,
+    quarter_reflection TEXT,
+    new_goals TEXT,
+    outlook TEXT,
+    claude_reflection TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(year, quarter)
+);
 """
 
 

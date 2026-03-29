@@ -836,6 +836,127 @@ async def chat_clear(request: Request):
         await db.close()
 
 
+# --- Kwartaalreview ---
+
+
+@app.get("/quarterly", response_class=HTMLResponse)
+async def quarterly_page(request: Request):
+    now = datetime.now()
+    year, _, _ = now.isocalendar()
+    quarter = (now.month - 1) // 3 + 1
+
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT * FROM quarterly_reviews WHERE year = ? AND quarter = ?",
+            (year, quarter),
+        )
+        existing = await cursor.fetchone()
+        existing = dict(existing) if existing else None
+
+        cursor = await db.execute(
+            "SELECT id, title, type, status FROM goals WHERE status = 'active' ORDER BY type, year, quarter"
+        )
+        goals = [dict(g) for g in await cursor.fetchall()]
+
+        return templates.TemplateResponse(
+            request,
+            "quarterly.html",
+            {
+                "active_nav": "quarterly",
+                "year": year,
+                "quarter": quarter,
+                "existing": existing,
+                "goals": goals,
+            },
+        )
+    finally:
+        await db.close()
+
+
+@app.post("/api/quarterly")
+async def save_quarterly(request: Request):
+    form = await request.form()
+    now = datetime.now()
+    year, _, _ = now.isocalendar()
+    quarter = (now.month - 1) // 3 + 1
+
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO quarterly_reviews (
+                year, quarter,
+                highlights_proud, highlights_bad, goals_review,
+                cat_werk, cat_relatie, cat_familie, cat_vrienden, cat_gezondheid,
+                cat_vaardigheden, cat_sideprojects, cat_plezier,
+                cat_geld_inkomen, cat_geld_sparen, cat_geld_geven,
+                quarter_reflection, new_goals, outlook
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(year, quarter) DO UPDATE SET
+                highlights_proud = excluded.highlights_proud,
+                highlights_bad = excluded.highlights_bad,
+                goals_review = excluded.goals_review,
+                cat_werk = excluded.cat_werk,
+                cat_relatie = excluded.cat_relatie,
+                cat_familie = excluded.cat_familie,
+                cat_vrienden = excluded.cat_vrienden,
+                cat_gezondheid = excluded.cat_gezondheid,
+                cat_vaardigheden = excluded.cat_vaardigheden,
+                cat_sideprojects = excluded.cat_sideprojects,
+                cat_plezier = excluded.cat_plezier,
+                cat_geld_inkomen = excluded.cat_geld_inkomen,
+                cat_geld_sparen = excluded.cat_geld_sparen,
+                cat_geld_geven = excluded.cat_geld_geven,
+                quarter_reflection = excluded.quarter_reflection,
+                new_goals = excluded.new_goals,
+                outlook = excluded.outlook""",
+            (
+                year, quarter,
+                form.get("highlights_proud"), form.get("highlights_bad"),
+                form.get("goals_review"),
+                form.get("cat_werk"), form.get("cat_relatie"), form.get("cat_familie"),
+                form.get("cat_vrienden"), form.get("cat_gezondheid"),
+                form.get("cat_vaardigheden"), form.get("cat_sideprojects"),
+                form.get("cat_plezier"), form.get("cat_geld_inkomen"),
+                form.get("cat_geld_sparen"), form.get("cat_geld_geven"),
+                form.get("quarter_reflection"), form.get("new_goals"),
+                form.get("outlook"),
+            ),
+        )
+        await db.commit()
+        return RedirectResponse("/quarterly", status_code=303)
+    finally:
+        await db.close()
+
+
+@app.post("/api/reflect/quarterly")
+async def reflect_quarterly_api(request: Request):
+    now = datetime.now()
+    year, _, _ = now.isocalendar()
+    quarter = (now.month - 1) // 3 + 1
+
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT * FROM quarterly_reviews WHERE year = ? AND quarter = ?",
+            (year, quarter),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return JSONResponse({"error": "Geen kwartaalreview gevonden"}, status_code=404)
+
+        response = await insights.reflect_quarterly(db, dict(row))
+
+        await db.execute(
+            "UPDATE quarterly_reviews SET claude_reflection = ? WHERE year = ? AND quarter = ?",
+            (response, year, quarter),
+        )
+        await db.commit()
+        return JSONResponse({"response": response})
+    finally:
+        await db.close()
+
+
 # --- Health Sync (Apple Shortcuts → Grip) ---
 
 # Veldnaam → (tracker naam, eenheid, type)

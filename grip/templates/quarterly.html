@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% set active_nav = "quarterly" %}
+
+{% block title %}Kwartaalreview Q{{ quarter }} {{ year }} — Grip{% endblock %}
+
+{% block content %}
+<div class="quarterly-header">
+    <div class="quarterly-badge">Q{{ quarter }} · {{ year }}</div>
+    <h1>Kwartaalreview</h1>
+    <p class="quarterly-sub">Neem de tijd. Pak je agenda, foto's en aantekeningen erbij.</p>
+</div>
+
+{% if existing %}
+<div class="card" style="border-left: 3px solid var(--success);">
+    <span class="badge badge-done">&#x2713; Opgeslagen</span>
+    <p style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.875rem;">Je kunt je review aanpassen en opnieuw opslaan.</p>
+</div>
+{% endif %}
+
+<form method="POST" action="/api/quarterly">
+
+    <!-- Stap 1: Overzicht -->
+    <div class="quarterly-step">
+        <div class="quarterly-step-label">Stap 1</div>
+        <h2 class="quarterly-step-title">Kwartaal overzicht</h2>
+        <p class="quarterly-step-hint">Pak je agenda, foto's en aantekeningen erbij. Blik terug op de afgelopen drie maanden.</p>
+
+        <div class="card">
+            <div class="form-group">
+                <label>Waar ben je trots op? Met welke activiteiten ben je blij?</label>
+                <textarea name="highlights_proud" rows="5" placeholder="Hoogtepunten, successen, mooie momenten...">{{ existing.highlights_proud if existing else '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="form-group">
+                <label>Waar heb je geen goed gevoel over?</label>
+                <textarea name="highlights_bad" rows="4" placeholder="Wat had beter gekund, wat heb je gemist...">{{ existing.highlights_bad if existing else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stap 2: Doelen -->
+    <div class="quarterly-step">
+        <div class="quarterly-step-label">Stap 2</div>
+        <h2 class="quarterly-step-title">Terugkijken op je doelen</h2>
+        <p class="quarterly-step-hint">Per doel: Heb je het bereikt? Heb je er alles aan gedaan? Ben je het uit het oog verloren? Hoe kwam dat?</p>
+
+        {% if goals %}
+        <div class="quarterly-goals-ref">
+            <div class="quarterly-goals-ref-label">Je actieve doelen</div>
+            {% for g in goals %}
+            <div class="quarterly-goal-item">
+                <span class="quarterly-goal-type">{{ g.type }}</span>
+                {{ g.title }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="form-group">
+                <label>Reflectie per doel</label>
+                <textarea name="goals_review" rows="6" placeholder="Doel 1: ...&#10;Doel 2: ...">{{ existing.goals_review if existing else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stap 3: Categorieën -->
+    <div class="quarterly-step">
+        <div class="quarterly-step-label">Stap 3</div>
+        <h2 class="quarterly-step-title">Review per categorie</h2>
+        <p class="quarterly-step-hint">Wat heb je gedaan? Wat juist niet? Waar ben je blij mee en waar niet? Wat levert energie op?</p>
+
+        {% set categories = [
+            ('Werk', 'cat_werk'),
+            ('Relatie & gezin', 'cat_relatie'),
+            ('Familie', 'cat_familie'),
+            ('Vrienden', 'cat_vrienden'),
+            ('Gezondheid', 'cat_gezondheid'),
+            ('Vaardigheden', 'cat_vaardigheden'),
+            ('Sideprojects', 'cat_sideprojects'),
+            ('Plezier', 'cat_plezier'),
+            ('Geld – inkomen', 'cat_geld_inkomen'),
+            ('Geld – sparen', 'cat_geld_sparen'),
+            ('Geld – geven', 'cat_geld_geven'),
+        ] %}
+
+        {% for label, field in categories %}
+        <div class="card quarterly-cat-card">
+            <div class="form-group">
+                <label>{{ label }}</label>
+                <textarea name="{{ field }}" rows="3" placeholder="Wat deed je? Hoe voelde dat?">{{ existing[field] if existing and existing[field] else '' }}</textarea>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Stap 4: Terugkijken -->
+    <div class="quarterly-step">
+        <div class="quarterly-step-label">Stap 4</div>
+        <h2 class="quarterly-step-title">Terugkijken op het kwartaal</h2>
+        <p class="quarterly-step-hint">Wat valt op bij dit kwartaal? Wat stak er positief of negatief bovenuit? Waar ben je trots op?</p>
+
+        <div class="card">
+            <div class="form-group">
+                <label>Jouw reflectie</label>
+                <textarea name="quarter_reflection" rows="6" placeholder="Zet een stap achteruit en kijk naar het grote plaatje...">{{ existing.quarter_reflection if existing else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stap 5: Nieuwe doelen -->
+    <div class="quarterly-step">
+        <div class="quarterly-step-label">Stap 5</div>
+        <h2 class="quarterly-step-title">Nieuwe doelen Q{{ quarter + 1 if quarter < 4 else 1 }} {{ year if quarter < 4 else year + 1 }}</h2>
+        <p class="quarterly-step-hint">Wat wil je de komende drie maanden bereiken?</p>
+
+        <div class="card">
+            <div class="form-group">
+                <label>Doelen voor volgend kwartaal</label>
+                <textarea name="new_goals" rows="5" placeholder="- &#10;- &#10;- ">{{ existing.new_goals if existing else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stap 6: Vooruitblik -->
+    <div class="quarterly-step">
+        <div class="quarterly-step-label">Stap 6</div>
+        <h2 class="quarterly-step-title">Vooruitblik komende kwartalen</h2>
+        <p class="quarterly-step-hint">Wat staat er verder op de planning? Wat wil je dit jaar nog bereiken?</p>
+
+        <div class="card">
+            <div class="form-group">
+                <label>Vooruitblik</label>
+                <textarea name="outlook" rows="5" placeholder="Q{{ quarter + 2 if quarter < 3 else quarter - 1 }}: ...&#10;Q{{ quarter + 3 if quarter < 2 else quarter }}: ...">{{ existing.outlook if existing else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">Kwartaalreview opslaan</button>
+</form>
+
+{% if existing %}
+<div style="margin-bottom: 2rem;">
+    {% if existing.claude_reflection %}
+    <div class="claude-insight-box">
+        <div class="claude-insight-label">Claude's reflectie</div>
+        <div class="claude-insight-text">{{ existing.claude_reflection }}</div>
+    </div>
+    {% else %}
+    <button class="btn btn-blue" onclick="askClaude()" id="claude-btn" style="width: 100%;">Vraag Claude om reflectie</button>
+    <div class="loading" id="claude-loading">Even nadenken...</div>
+    <div class="claude-insight-box" id="claude-result" style="display:none">
+        <div class="claude-insight-label">Claude's reflectie</div>
+        <div class="claude-insight-text" id="claude-text"></div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function askClaude() {
+    const btn = document.getElementById('claude-btn');
+    const loading = document.getElementById('claude-loading');
+    const result = document.getElementById('claude-result');
+    const text = document.getElementById('claude-text');
+
+    btn.disabled = true;
+    btn.style.display = 'none';
+    loading.classList.add('active');
+
+    try {
+        const res = await fetch('/api/reflect/quarterly', { method: 'POST' });
+        const data = await res.json();
+        text.textContent = data.response;
+        result.style.display = 'block';
+    } catch {
+        btn.style.display = '';
+        btn.disabled = false;
+        alert('Er ging iets mis.');
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+</script>
+{% endblock %}

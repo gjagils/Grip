@@ -287,6 +287,68 @@ async def load_chat_history(db: aiosqlite.Connection, limit: int = 40) -> list[d
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
+async def reflect_quarterly(db: aiosqlite.Connection, review: dict) -> str:
+    """Sonnet reflectie op de kwartaalreview."""
+    now = datetime.now()
+    year, _, _ = now.isocalendar()
+    quarter = (now.month - 1) // 3 + 1
+
+    parts = [f"## Kwartaalreview Q{quarter} {year}"]
+
+    if review.get("highlights_proud"):
+        parts.append(f"\n### Trots op / blij mee\n{review['highlights_proud']}")
+    if review.get("highlights_bad"):
+        parts.append(f"\n### Geen goed gevoel over\n{review['highlights_bad']}")
+    if review.get("goals_review"):
+        parts.append(f"\n### Doelen terugkijken\n{review['goals_review']}")
+
+    cats = [
+        ("Werk", "cat_werk"), ("Relatie & gezin", "cat_relatie"),
+        ("Familie", "cat_familie"), ("Vrienden", "cat_vrienden"),
+        ("Gezondheid", "cat_gezondheid"), ("Vaardigheden", "cat_vaardigheden"),
+        ("Sideprojects", "cat_sideprojects"), ("Plezier", "cat_plezier"),
+        ("Geld – inkomen", "cat_geld_inkomen"), ("Geld – sparen", "cat_geld_sparen"),
+        ("Geld – geven", "cat_geld_geven"),
+    ]
+    filled = [(label, review[key]) for label, key in cats if review.get(key)]
+    if filled:
+        parts.append("\n### Review per categorie")
+        for label, text in filled:
+            parts.append(f"\n**{label}:** {text}")
+
+    if review.get("quarter_reflection"):
+        parts.append(f"\n### Terugkijken op kwartaal\n{review['quarter_reflection']}")
+    if review.get("new_goals"):
+        parts.append(f"\n### Nieuwe doelen\n{review['new_goals']}")
+    if review.get("outlook"):
+        parts.append(f"\n### Vooruitblik\n{review['outlook']}")
+
+    # Actieve doelen als context
+    cursor = await db.execute(
+        "SELECT title, type FROM goals WHERE status = 'active' ORDER BY type"
+    )
+    goals = await cursor.fetchall()
+    if goals:
+        parts.append("\n### Actieve doelen (context)")
+        for g in goals:
+            parts.append(f"- [{g['type']}] {g['title']}")
+
+    context = "\n".join(parts)
+
+    response = await client.messages.create(
+        model="claude-sonnet-4-5-20250929",
+        max_tokens=1024,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{context}\n\n---\nReflecteer op deze kwartaalreview. Geef scherpe observaties over patronen en blinde vlekken. Stel 2-3 krachtige vragen die helpen bij het formuleren van doelen voor het nieuwe kwartaal.",
+            }
+        ],
+    )
+    return response.content[0].text
+
+
 async def export_week_markdown(db: aiosqlite.Connection) -> str:
     """Exporteer de laatste 2 weken als markdown voor Claude.ai Projects."""
     now = datetime.now()
