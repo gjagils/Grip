@@ -287,6 +287,24 @@ async def load_chat_history(db: aiosqlite.Connection, limit: int = 40) -> list[d
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
+async def generate_checkin_question(db: aiosqlite.Connection) -> str:
+    """Haiku genereert één persoonlijke vraag op basis van recente check-ins."""
+    context = await _build_context(db, days=7)
+
+    response = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=120,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{context}\n\n---\nGenereer één korte, persoonlijke vraag voor de dagelijkse check-in. Baseer hem op een recent patroon, uitspraak of doel. Alleen de vraag, geen inleiding.",
+            }
+        ],
+    )
+    return response.content[0].text.strip()
+
+
 async def reflect_quarterly(db: aiosqlite.Connection, review: dict) -> str:
     """Sonnet reflectie op de kwartaalreview."""
     now = datetime.now()

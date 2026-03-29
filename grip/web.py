@@ -105,23 +105,35 @@ async def checkin_page(request: Request):
     try:
         today = date.today()
         today_str = today.isoformat()
-        questions = await get_daily_questions(db, today)
+        yesterday_str = (today - timedelta(days=1)).isoformat()
 
-        # Check of er al een check-in is voor vandaag
-        cursor = await db.execute(
-            "SELECT id FROM check_ins WHERE date = ?", (today_str,)
-        )
-        existing = await cursor.fetchone()
+        # Vandaag's check-in
+        cursor = await db.execute("SELECT * FROM check_ins WHERE date = ?", (today_str,))
+        existing_row = await cursor.fetchone()
+        existing = dict(existing_row) if existing_row else None
 
-        # Dagelijkse taken voor vandaag
+        # Vandaag's taken
         cursor = await db.execute(
             "SELECT id, title, completed FROM daily_tasks WHERE date = ? ORDER BY created_at",
             (today_str,),
         )
-        daily_tasks = [dict(r) for r in await cursor.fetchall()]
+        today_tasks = [dict(r) for r in await cursor.fetchall()]
 
-        # Actieve trackers — gisteren's waarden tonen als referentie
-        yesterday_str = (today - timedelta(days=1)).isoformat()
+        # Gisteren's taken
+        cursor = await db.execute(
+            "SELECT id, title, completed FROM daily_tasks WHERE date = ? ORDER BY created_at",
+            (yesterday_str,),
+        )
+        yesterday_tasks = [dict(r) for r in await cursor.fetchall()]
+
+        # Gisteren's doel (today_main_goal van gisterens check-in)
+        cursor = await db.execute(
+            "SELECT today_main_goal FROM check_ins WHERE date = ?", (yesterday_str,)
+        )
+        yesterday_checkin = await cursor.fetchone()
+        yesterday_goal = yesterday_checkin["today_main_goal"] if yesterday_checkin else None
+
+        # Trackers — gisteren's waarden
         cursor = await db.execute(
             "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, t.threshold_direction, te.value FROM trackers t "
             "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
@@ -130,7 +142,7 @@ async def checkin_page(request: Request):
         )
         trackers = [dict(r) for r in await cursor.fetchall()]
 
-        # Bestaand dagelijks inzicht van vandaag
+        # Bestaand dagelijks inzicht
         cursor = await db.execute(
             "SELECT response FROM insights WHERE context_type = 'daily' AND date(created_at) = ? ORDER BY created_at DESC LIMIT 1",
             (today_str,),
@@ -141,10 +153,12 @@ async def checkin_page(request: Request):
             request,
             "checkin.html",
             {
-                "questions": questions,
                 "today": today_str,
                 "already_done": existing is not None,
-                "daily_tasks": daily_tasks,
+                "existing": existing,
+                "today_tasks": today_tasks,
+                "yesterday_tasks": yesterday_tasks,
+                "yesterday_goal": yesterday_goal,
                 "trackers": trackers,
                 "today_insight": existing_insight["response"] if existing_insight else None,
             },
@@ -160,66 +174,63 @@ async def save_checkin(request: Request):
         form = await request.form()
         today = date.today().isoformat()
 
-        # Maak check-in aan (of gebruik bestaande)
+        # Maak check-in aan of update bestaande
         cursor = await db.execute("SELECT id FROM check_ins WHERE date = ?", (today,))
         row = await cursor.fetchone()
         if row:
             checkin_id = row["id"]
-            # Verwijder oude antwoorden
-            await db.execute(
-                "DELETE FROM check_in_answers WHERE check_in_id = ?", (checkin_id,)
-            )
         else:
             cursor = await db.execute(
                 "INSERT INTO check_ins (date, completed) VALUES (?, 1)", (today,)
             )
             checkin_id = cursor.lastrowid
 
-        # Sla antwoorden op
-        for key, value in form.items():
-            if not key.startswith("q_"):
-                continue
-            question_id = int(key.split("_")[1])
-            qtype = form.get(f"type_{question_id}", "open")
+        # Sla gestructureerde velden op
+        await db.execute(
+            """UPDATE check_ins SET
+                yesterday_highlight = ?, yesterday_different = ?,
+                yesterday_goal_done = ?, yesterday_goal_note = ?,
+                today_main_goal = ?, today_joy = ?,
+                claude_question = ?, claude_question_answer = ?,
+                completed = 1
+               WHERE id = ?""",
+            (
+                form.get("yesterday_highlight"),
+                form.get("yesterday_different"),
+                1 if form.get("yesterday_goal_done") else 0,
+                form.get("yesterday_goal_note"),
+                form.get("today_main_goal"),
+                form.get("today_joy"),
+                form.get("claude_question"),
+                form.get("claude_question_answer"),
+                checkin_id,
+            ),
+        )
 
-            if qtype == "score" and value:
-                await db.execute(
-                    "INSERT INTO check_in_answers (check_in_id, question_id, answer_score) VALUES (?, ?, ?)",
-                    (checkin_id, question_id, int(value)),
-                )
-            elif value:
-                await db.execute(
-                    "INSERT INTO check_in_answers (check_in_id, question_id, answer_text) VALUES (?, ?, ?)",
-                    (checkin_id, question_id, value),
-                )
-
-        # Dagelijkse taken bijwerken
-        for key, value in form.items():
-            if key.startswith("task_"):
-                task_id = int(key.split("_")[1])
-                await db.execute(
-                    "UPDATE daily_tasks SET completed = 1, check_in_id = ? WHERE id = ?",
-                    (checkin_id, task_id),
-                )
-
-        # Tracker entries opslaan
-        for key, value in form.items():
-            if not key.startswith("tracker_") or not value:
-                continue
-            tracker_id = int(key.split("_")[1])
+        # Gisteren's taken markeren als voltooid/niet voltooid
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        cursor = await db.execute(
+            "SELECT id FROM daily_tasks WHERE date = ?", (yesterday,)
+        )
+        yesterday_task_rows = await cursor.fetchall()
+        for t in yesterday_task_rows:
+            done = form.get(f"ytask_{t['id']}")
             await db.execute(
-                """INSERT INTO tracker_entries (tracker_id, date, value)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(tracker_id, date) DO UPDATE SET value = ?""",
-                (tracker_id, today, float(value), float(value)),
+                "UPDATE daily_tasks SET completed = ? WHERE id = ?",
+                (1 if done else 0, t["id"]),
             )
 
-        # Markeer als compleet
-        await db.execute(
-            "UPDATE check_ins SET completed = 1 WHERE id = ?", (checkin_id,)
-        )
-        await db.commit()
+        # Vandaag's taken aanmaken (max 3)
+        for i in range(1, 4):
+            title = form.get(f"today_task_{i}", "").strip()
+            if title:
+                # Upsert: als er al een taak met deze positie is, update; anders insert
+                await db.execute(
+                    "INSERT INTO daily_tasks (title, date, check_in_id) VALUES (?, ?, ?)",
+                    (title, today, checkin_id),
+                )
 
+        await db.commit()
         return RedirectResponse("/", status_code=303)
     finally:
         await db.close()
@@ -768,6 +779,17 @@ async def ask_insight(request: Request):
         await db.commit()
 
         return JSONResponse({"response": response})
+    finally:
+        await db.close()
+
+
+@app.get("/api/checkin/question")
+async def checkin_question(request: Request):
+    """Genereert een persoonlijke vraag van Claude voor de check-in."""
+    db = await get_db()
+    try:
+        question = await insights.generate_checkin_question(db)
+        return JSONResponse({"question": question})
     finally:
         await db.close()
 

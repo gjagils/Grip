@@ -4,17 +4,16 @@
 {% block title %}Check-in — Grip{% endblock %}
 
 {% block content %}
-<h1><span class="doodle-underline">Dagelijkse check-in</span></h1>
+<h1><span class="doodle-underline">Check-in</span></h1>
 <div class="page-accent page-accent-orange"></div>
 <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-style: italic;">{{ today }}</p>
 
 {% if already_done %}
-<div class="card">
+<div class="card" style="border-left: 3px solid var(--success);">
     <span class="badge badge-done">&#x2713; Al ingevuld vandaag</span>
-    <p style="margin-top: 0.75rem; color: var(--text-muted);">Je kunt je antwoorden bijwerken door het formulier opnieuw in te vullen.</p>
-
+    <p style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.875rem;">Je kunt je antwoorden bijwerken.</p>
     {% if today_insight %}
-    <div class="claude-insight-box" id="claude-result">
+    <div class="claude-insight-box" style="margin-top: 1rem;">
         <div class="claude-insight-label">Claude's reflectie</div>
         <div class="claude-insight-text">{{ today_insight }}</div>
     </div>
@@ -31,134 +30,174 @@
 </div>
 {% endif %}
 
-<!-- Dagelijkse taken -->
-<div class="card">
-    <div class="card-header">
-        <h2>&#x2611;&#xFE0F; Taken vandaag</h2>
-    </div>
+<form method="POST" action="/api/checkin" id="checkin-form">
 
-    {% if daily_tasks %}
-    <div class="task-list" id="daily-task-list">
-        {% for task in daily_tasks %}
-        <div class="task-item" id="daily-task-{{ task.id }}">
-            <label class="task-check">
-                <input type="checkbox" {% if task.completed %}checked{% endif %}
-                       onchange="toggleDailyTask({{ task.id }}, this.checked)">
-                <span class="task-label {% if task.completed %}task-done{% endif %}">{{ task.title }}</span>
-            </label>
-            <button class="task-delete" onclick="deleteDailyTask({{ task.id }})" title="Verwijder">&times;</button>
+    <!-- ══ SECTIE 1: GISTEREN ══ -->
+    <div class="checkin-section-label">Gisteren</div>
+
+    <!-- Trackers -->
+    {% if trackers %}
+    <div class="card">
+        <div class="card-header">
+            <h2>📊 Hoe was gisteren?</h2>
+            <a href="/trackers" class="btn btn-small btn-secondary" style="font-size: 0.7rem;">Beheer</a>
         </div>
-        {% endfor %}
+        <div class="tracker-list">
+            {% for t in trackers %}
+            {% if t.value is not none and t.threshold_green is not none and t.threshold_red is not none %}
+                {% if t.threshold_direction == 'lower' %}
+                    {% if t.value <= t.threshold_green %}{% set color_class = 'tracker-green' %}{% set smiley = '😊' %}
+                    {% elif t.value > t.threshold_red %}{% set color_class = 'tracker-red' %}{% set smiley = '😟' %}
+                    {% else %}{% set color_class = 'tracker-orange' %}{% set smiley = '😐' %}{% endif %}
+                {% else %}
+                    {% if t.value >= t.threshold_green %}{% set color_class = 'tracker-green' %}{% set smiley = '😊' %}
+                    {% elif t.value < t.threshold_red %}{% set color_class = 'tracker-red' %}{% set smiley = '😟' %}
+                    {% else %}{% set color_class = 'tracker-orange' %}{% set smiley = '😐' %}{% endif %}
+                {% endif %}
+            {% else %}{% set color_class = '' %}{% set smiley = '' %}{% endif %}
+            <div class="tracker-item {{ color_class }}">
+                <div class="tracker-info">
+                    <span class="tracker-name">{{ t.name }}</span>
+                    {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    {% if smiley %}<span style="font-size: 1.1rem;">{{ smiley }}</span>{% endif %}
+                    <span class="tracker-readonly-value">
+                        {% if t.value is not none %}{{ t.value|int if t.type == 'number' else ('✓' if t.value == 1.0 else '✗') }}{% else %}–{% endif %}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 
-    <form method="POST" action="/api/daily-tasks" class="task-add-form">
-        <input type="hidden" name="date" value="{{ today }}">
-        <input type="text" name="title" placeholder="Nieuwe taak toevoegen..." class="task-add-input">
-        <button type="submit" class="btn btn-small btn-secondary">+</button>
-    </form>
-</div>
-
-<!-- Trackers -->
-{% if trackers %}
-<div class="card">
-    <div class="card-header">
-        <h2>&#x1F4CA; Trackers</h2>
-        <a href="/trackers" class="btn btn-small btn-secondary">Beheer</a>
-    </div>
-    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">Waarden van gisteren</p>
-
-    <div class="tracker-list">
-        {% for t in trackers %}
-        {% if t.value is not none and t.threshold_green is not none and t.threshold_red is not none %}
-            {% if t.threshold_direction == 'lower' %}
-                {% if t.value <= t.threshold_green %}{% set color_class = 'tracker-green' %}
-                {% elif t.value > t.threshold_red %}{% set color_class = 'tracker-red' %}
-                {% else %}{% set color_class = 'tracker-orange' %}{% endif %}
-            {% else %}
-                {% if t.value >= t.threshold_green %}{% set color_class = 'tracker-green' %}
-                {% elif t.value < t.threshold_red %}{% set color_class = 'tracker-red' %}
-                {% else %}{% set color_class = 'tracker-orange' %}{% endif %}
-            {% endif %}
-        {% else %}{% set color_class = '' %}{% endif %}
-        <div class="tracker-item {{ color_class }}">
-            <div class="tracker-info">
-                <span class="tracker-name">{{ t.name }}</span>
-                {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
-            </div>
-            {% if t.type == 'boolean' %}
-            <label class="task-check">
-                <input type="checkbox" form="checkin-form" name="tracker_{{ t.id }}" value="1"
-                       {% if t.value and t.value == 1.0 %}checked{% endif %}>
-                <span class="tracker-bool-label">&#x2713;</span>
-            </label>
-            {% else %}
-            <input type="number" form="checkin-form" name="tracker_{{ t.id }}"
-                   value="{{ t.value|int if t.value else '' }}"
-                   placeholder="0" class="tracker-input" step="any">
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% else %}
-<div class="highlight-box-blue" style="text-align: center;">
-    <p style="margin-bottom: 0.5rem;">Nog geen trackers ingesteld</p>
-    <a href="/trackers" class="btn btn-small btn-blue">Trackers configureren</a>
-</div>
-{% endif %}
-
-<!-- Check-in vragen -->
-<form method="POST" action="/api/checkin" id="checkin-form">
-    {% for q in questions %}
+    <!-- Gisteren reflectie -->
     <div class="card">
         <div class="form-group">
-            <label>{{ q.text }}</label>
-
-            {% if q.type == "score" %}
-            <input type="hidden" name="type_{{ q.id }}" value="score">
-            <div class="score-input">
-                <input type="range" name="q_{{ q.id }}" min="1" max="10" value="5"
-                       oninput="this.parentElement.querySelector('.score-value').textContent = this.value">
-                <span class="score-value">5</span>
-            </div>
-            {% else %}
-            <input type="hidden" name="type_{{ q.id }}" value="open">
-            <textarea name="q_{{ q.id }}" placeholder="Je antwoord..." rows="3"></textarea>
-            {% endif %}
+            <label>Wat was het leukste van gisteren?</label>
+            <textarea name="yesterday_highlight" rows="2" placeholder="Hoogtepunt, mooi moment...">{{ existing.yesterday_highlight if existing and existing.yesterday_highlight else '' }}</textarea>
         </div>
     </div>
-    {% endfor %}
 
-    <!-- Checked taken meesturen met het formulier -->
-    {% for task in daily_tasks %}
-    <input type="hidden" name="task_{{ task.id }}" value="1"
-           id="task-hidden-{{ task.id }}" {% if not task.completed %}disabled{% endif %}>
-    {% endfor %}
+    <div class="card">
+        <div class="form-group">
+            <label>Wat zou je vandaag anders doen?</label>
+            <textarea name="yesterday_different" rows="2" placeholder="Wat neem je mee...">{{ existing.yesterday_different if existing and existing.yesterday_different else '' }}</textarea>
+        </div>
+    </div>
 
-    <button type="submit" class="btn btn-primary">Check-in opslaan</button>
+    <!-- Doel van gisteren -->
+    {% if yesterday_goal %}
+    <div class="card">
+        <div class="form-group">
+            <label>Doel van gisteren gehaald?</label>
+            <div class="yesterday-goal-ref">{{ yesterday_goal }}</div>
+            <div class="goal-done-row">
+                <label class="goal-done-check">
+                    <input type="checkbox" name="yesterday_goal_done" value="1"
+                           {% if existing and existing.yesterday_goal_done %}checked{% endif %}>
+                    <span>Gehaald ✓</span>
+                </label>
+            </div>
+            <textarea name="yesterday_goal_note" rows="2" placeholder="Toelichting (optioneel)..." style="margin-top: 0.5rem;">{{ existing.yesterday_goal_note if existing and existing.yesterday_goal_note else '' }}</textarea>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Taken van gisteren -->
+    {% if yesterday_tasks %}
+    <div class="card">
+        <div class="form-group">
+            <label>Taken van gisteren</label>
+            {% for task in yesterday_tasks %}
+            <div class="yesterday-task-row">
+                <label class="task-check">
+                    <input type="checkbox" name="ytask_{{ task.id }}" value="1"
+                           {% if task.completed %}checked{% endif %}>
+                    <span class="task-label {% if task.completed %}task-done{% endif %}">{{ task.title }}</span>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ══ SECTIE 2: VANDAAG ══ -->
+    <div class="checkin-section-label" style="margin-top: 1.5rem;">Vandaag</div>
+
+    <!-- Doel vandaag -->
+    <div class="card">
+        <div class="form-group">
+            <label>Wat is je belangrijkste doel vandaag?</label>
+            <input type="text" name="today_main_goal" placeholder="Één doel dat ertoe doet..."
+                   value="{{ existing.today_main_goal if existing and existing.today_main_goal else '' }}">
+        </div>
+    </div>
+
+    <!-- Taken vandaag (max 3) -->
+    <div class="card">
+        <div class="form-group">
+            <label>Maximaal 3 taken voor vandaag</label>
+            {% set today_task_values = [] %}
+            {% for task in today_tasks %}{% if today_task_values.append(task.title) %}{% endif %}{% endfor %}
+            {% for i in range(1, 4) %}
+            <input type="text" name="today_task_{{ i }}"
+                   placeholder="Taak {{ i }}..."
+                   value="{{ today_task_values[i-1] if today_task_values|length >= i else '' }}"
+                   style="margin-bottom: 0.5rem;">
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Zin in -->
+    <div class="card">
+        <div class="form-group">
+            <label>Waar heb je zin in vandaag?</label>
+            <textarea name="today_joy" rows="2" placeholder="Iets om naar uit te kijken...">{{ existing.today_joy if existing and existing.today_joy else '' }}</textarea>
+        </div>
+    </div>
+
+    <!-- Claude's vraag -->
+    <div class="card" id="claude-question-card">
+        <div class="form-group">
+            <label id="claude-question-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 0.7rem; background: var(--blue-soft); color: var(--blue); border-radius: 4px; padding: 0.1rem 0.4rem; font-weight: 600;">Claude</span>
+                <span id="claude-q-text">
+                    {% if existing and existing.claude_question %}
+                        {{ existing.claude_question }}
+                    {% else %}
+                        <span style="color: var(--text-muted); font-style: italic;">Vraag wordt geladen...</span>
+                    {% endif %}
+                </span>
+            </label>
+            <input type="hidden" name="claude_question" id="claude-question-hidden"
+                   value="{{ existing.claude_question if existing and existing.claude_question else '' }}">
+            <textarea name="claude_question_answer" rows="3" placeholder="Jouw antwoord...">{{ existing.claude_question_answer if existing and existing.claude_question_answer else '' }}</textarea>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="width: 100%;">Check-in opslaan</button>
 </form>
 {% endblock %}
 
 {% block scripts %}
 <script>
-async function toggleDailyTask(taskId, checked) {
-    await fetch(`/api/daily-tasks/${taskId}/toggle`, { method: 'POST' });
-    const label = document.querySelector(`#daily-task-${taskId} .task-label`);
-    const hidden = document.getElementById(`task-hidden-${taskId}`);
-    if (checked) {
-        label.classList.add('task-done');
-        if (hidden) hidden.disabled = false;
-    } else {
-        label.classList.remove('task-done');
-        if (hidden) hidden.disabled = true;
+// Claude's vraag ophalen bij laden (alleen als nog niet beschikbaar)
+{% if not (existing and existing.claude_question) %}
+async function loadClaudeQuestion() {
+    try {
+        const res = await fetch('/api/checkin/question');
+        const data = await res.json();
+        document.getElementById('claude-q-text').textContent = data.question;
+        document.getElementById('claude-question-hidden').value = data.question;
+    } catch {
+        document.getElementById('claude-q-text').textContent = 'Wat wil je vandaag écht bereiken?';
+        document.getElementById('claude-question-hidden').value = 'Wat wil je vandaag écht bereiken?';
     }
 }
-
-async function deleteDailyTask(taskId) {
-    await fetch(`/api/daily-tasks/${taskId}`, { method: 'DELETE' });
-    document.getElementById(`daily-task-${taskId}`).remove();
-}
+loadClaudeQuestion();
+{% endif %}
 
 async function askClaude() {
     const btn = document.getElementById('claude-btn');
@@ -178,7 +217,7 @@ async function askClaude() {
     } catch {
         btn.style.display = '';
         btn.disabled = false;
-        alert('Er ging iets mis. Controleer je API key.');
+        alert('Er ging iets mis.');
     } finally {
         loading.classList.remove('active');
     }

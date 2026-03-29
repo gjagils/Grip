@@ -19,7 +19,15 @@ CREATE TABLE IF NOT EXISTS check_ins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    completed INTEGER NOT NULL DEFAULT 0
+    completed INTEGER NOT NULL DEFAULT 0,
+    yesterday_highlight TEXT,
+    yesterday_different TEXT,
+    yesterday_goal_done INTEGER,
+    yesterday_goal_note TEXT,
+    today_main_goal TEXT,
+    today_joy TEXT,
+    claude_question TEXT,
+    claude_question_answer TEXT
 );
 
 CREATE TABLE IF NOT EXISTS check_in_answers (
@@ -178,6 +186,18 @@ async def _migrate_db(db: aiosqlite.Connection):
         await db.execute("ALTER TABLE trackers ADD COLUMN threshold_red REAL")
     if "threshold_direction" not in tracker_cols:
         await db.execute("ALTER TABLE trackers ADD COLUMN threshold_direction TEXT NOT NULL DEFAULT 'higher'")
+
+    # Check-in nieuwe velden
+    cursor = await db.execute("PRAGMA table_info(check_ins)")
+    checkin_cols = {row[1] for row in await cursor.fetchall()}
+    for col, coltype in [
+        ("yesterday_highlight", "TEXT"), ("yesterday_different", "TEXT"),
+        ("yesterday_goal_done", "INTEGER"), ("yesterday_goal_note", "TEXT"),
+        ("today_main_goal", "TEXT"), ("today_joy", "TEXT"),
+        ("claude_question", "TEXT"), ("claude_question_answer", "TEXT"),
+    ]:
+        if col not in checkin_cols:
+            await db.execute(f"ALTER TABLE check_ins ADD COLUMN {col} {coltype}")
 
     cursor = await db.execute("PRAGMA table_info(goals)")
     cols = {row[1] for row in await cursor.fetchall()}
