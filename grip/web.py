@@ -120,12 +120,13 @@ async def checkin_page(request: Request):
         )
         daily_tasks = [dict(r) for r in await cursor.fetchall()]
 
-        # Actieve trackers
+        # Actieve trackers — gisteren's waarden tonen als referentie
+        yesterday_str = (today - timedelta(days=1)).isoformat()
         cursor = await db.execute(
             "SELECT t.id, t.name, t.unit, t.type, te.value FROM trackers t "
             "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
             "WHERE t.active = 1 ORDER BY t.sort_order, t.id",
-            (today_str,),
+            (yesterday_str,),
         )
         trackers = [dict(r) for r in await cursor.fetchall()]
 
