@@ -1155,10 +1155,10 @@ async def reflect_quarterly_api(request: Request):
 _HEALTH_FIELDS = {
     "steps":              ("Stappen",               "stappen", "number"),
     "active_calories":    ("Actieve calorieën",     "kcal",    "number"),
-    "calories":           ("Actieve calorieën",     "kcal",    "number"),  # alias
-    "kcal":               ("Actieve calorieën",     "kcal",    "number"),  # alias
     "energy":             ("Actieve calorieën",     "kcal",    "number"),  # alias
-    "dietary_calories":   ("Gegeten calorieën",     "kcal",    "number"),
+    "kcal":               ("Gegeten calorieën",     "kcal",    "number"),
+    "calories":           ("Gegeten calorieën",     "kcal",    "number"),  # alias
+    "dietary_calories":   ("Gegeten calorieën",     "kcal",    "number"),  # alias
     "food_calories":      ("Gegeten calorieën",     "kcal",    "number"),  # alias
     "exercise_minutes":   ("Beweegminuten",         "min",     "number"),
     "stand_hours":        ("Staande uren",           "uur",     "number"),
