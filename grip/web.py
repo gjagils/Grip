@@ -135,7 +135,7 @@ async def checkin_page(request: Request):
 
         # Trackers — gisteren's waarden
         cursor = await db.execute(
-            "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, t.threshold_direction, te.value FROM trackers t "
+            "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, t.threshold_direction, te.value, te.note FROM trackers t "
             "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
             "WHERE t.active = 1 ORDER BY t.sort_order, t.id",
             (yesterday_str,),
@@ -219,6 +219,40 @@ async def save_checkin(request: Request):
                 "UPDATE daily_tasks SET completed = ? WHERE id = ?",
                 (1 if done else 0, t["id"]),
             )
+
+        # Gisteren's tracker waarden en notities opslaan
+        cursor = await db.execute("SELECT id, type FROM trackers WHERE active = 1")
+        active_trackers = await cursor.fetchall()
+        for t in active_trackers:
+            tid = t["id"]
+            note = form.get(f"tracker_note_{tid}", "").strip() or None
+            if t["type"] == "boolean":
+                raw = form.get(f"tracker_{tid}")
+                val = 1.0 if raw else 0.0
+                await db.execute(
+                    """INSERT INTO tracker_entries (tracker_id, date, value, note)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value, note = excluded.note""",
+                    (tid, yesterday, val, note),
+                )
+            else:
+                raw = form.get(f"tracker_{tid}", "").strip()
+                if raw != "":
+                    try:
+                        val = float(raw)
+                    except ValueError:
+                        continue
+                    await db.execute(
+                        """INSERT INTO tracker_entries (tracker_id, date, value, note)
+                           VALUES (?, ?, ?, ?)
+                           ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value, note = excluded.note""",
+                        (tid, yesterday, val, note),
+                    )
+                elif note:
+                    await db.execute(
+                        "UPDATE tracker_entries SET note = ? WHERE tracker_id = ? AND date = ?",
+                        (note, tid, yesterday),
+                    )
 
         # Vandaag's taken aanmaken (max 3)
         for i in range(1, 4):

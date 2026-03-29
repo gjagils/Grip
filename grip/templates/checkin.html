@@ -56,16 +56,28 @@
                 {% endif %}
             {% else %}{% set color_class = '' %}{% set smiley = '' %}{% endif %}
             <div class="tracker-item {{ color_class }}">
-                <div class="tracker-info">
-                    <span class="tracker-name">{{ t.name }}</span>
-                    {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
+                <div class="tracker-item-top">
+                    <div class="tracker-info">
+                        <span class="tracker-name">{{ t.name }}</span>
+                        {% if t.unit %}<span class="tracker-unit">({{ t.unit }})</span>{% endif %}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        {% if smiley %}<span style="font-size: 1.1rem;">{{ smiley }}</span>{% endif %}
+                        {% if t.type == 'boolean' %}
+                        <input type="checkbox" name="tracker_{{ t.id }}" value="1"
+                               {% if t.value == 1.0 %}checked{% endif %}
+                               style="width: 1.2rem; height: 1.2rem;">
+                        {% else %}
+                        <input type="number" name="tracker_{{ t.id }}"
+                               value="{{ t.value|int if t.value is not none else '' }}"
+                               placeholder="–" step="any"
+                               class="tracker-edit-input">
+                        {% endif %}
+                    </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    {% if smiley %}<span style="font-size: 1.1rem;">{{ smiley }}</span>{% endif %}
-                    <span class="tracker-readonly-value">
-                        {% if t.value is not none %}{{ t.value|int if t.type == 'number' else ('✓' if t.value == 1.0 else '✗') }}{% else %}–{% endif %}
-                    </span>
-                </div>
+                <textarea name="tracker_note_{{ t.id }}" rows="1"
+                          placeholder="Opmerking (optioneel)..."
+                          class="tracker-note-input">{{ t.note if t.note else '' }}</textarea>
             </div>
             {% endfor %}
         </div>

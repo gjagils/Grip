@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS tracker_entries (
     tracker_id INTEGER NOT NULL REFERENCES trackers(id) ON DELETE CASCADE,
     date TEXT NOT NULL,
     value REAL NOT NULL DEFAULT 0,
+    note TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(tracker_id, date)
 );
@@ -195,6 +196,12 @@ async def _migrate_db(db: aiosqlite.Connection):
         await db.execute("ALTER TABLE trackers ADD COLUMN threshold_red REAL")
     if "threshold_direction" not in tracker_cols:
         await db.execute("ALTER TABLE trackers ADD COLUMN threshold_direction TEXT NOT NULL DEFAULT 'higher'")
+
+    # Tracker entries: note veld
+    cursor = await db.execute("PRAGMA table_info(tracker_entries)")
+    te_cols = {row[1] for row in await cursor.fetchall()}
+    if "note" not in te_cols:
+        await db.execute("ALTER TABLE tracker_entries ADD COLUMN note TEXT")
 
     # Check-in nieuwe velden
     cursor = await db.execute("PRAGMA table_info(check_ins)")

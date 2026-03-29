@@ -743,10 +743,15 @@ details summary:hover {
 
 .tracker-item {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     padding: 0.5rem 0;
     border-bottom: 1px dashed var(--border);
+}
+
+.tracker-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .tracker-item:last-child {
@@ -1309,6 +1314,24 @@ details summary:hover {
     text-transform: uppercase;
     color: var(--orange);
     margin: 1.5rem 0 0.5rem;
+}
+
+.tracker-edit-input {
+    width: 5rem;
+    text-align: right;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.2rem 0.4rem;
+    margin: 0;
+}
+
+.tracker-note-input {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.4rem;
+    resize: none;
+    min-height: 1.8rem;
+    color: var(--text-muted);
 }
 
 .tracker-readonly-value {
