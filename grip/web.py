@@ -1187,9 +1187,9 @@ async def health_sync(request: Request):
     data = await request.json()
     db = await get_db()
     try:
-        # Default: gisteren
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
-        sync_date = data.get("date", yesterday)
+        # Default: vandaag (shortcut stuurt vandaag's data, check-in toont die morgen als "gisteren")
+        today_str = date.today().isoformat()
+        sync_date = data.get("date", today_str)
 
         synced: list[str] = []
 
