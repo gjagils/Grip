@@ -78,7 +78,7 @@
             {% for t in tracker_week %}
             <tr>
                 <td class="tracker-week-name">{{ t.name }}{% if t.unit %} <span class="tracker-unit">({{ t.unit }})</span>{% endif %}</td>
-                {% for val in t.values %}
+                {% for val in t.week_values %}
                 {% if val is not none %}
                     {% if t.threshold_green is not none and t.threshold_red is not none %}
                         {% if t.threshold_direction == 'lower' %}

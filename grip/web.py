@@ -348,7 +348,7 @@ async def weekreview_page(request: Request):
                 "threshold_green": t["threshold_green"],
                 "threshold_red": t["threshold_red"],
                 "threshold_direction": t["threshold_direction"],
-                "values": [entries.get(d) for d in week_dates],
+                "week_values": [entries.get(d) for d in week_dates],
             })
 
         return templates.TemplateResponse(
