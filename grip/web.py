@@ -1,7 +1,10 @@
 import json
+import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+logger = logging.getLogger("grip.health")
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -1184,7 +1187,14 @@ async def health_sync(request: Request):
     }
     Alle velden zijn optioneel. Alleen meegestuurde velden worden opgeslagen.
     """
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception as e:
+        logger.error("health/sync — ongeldige JSON: %s", e)
+        return JSONResponse({"ok": False, "error": f"Ongeldige JSON: {e}"}, status_code=400)
+
+    logger.info("health/sync — ontvangen: %s", json.dumps(data, default=str))
+
     db = await get_db()
     try:
         # Default: gisteren
@@ -1192,10 +1202,21 @@ async def health_sync(request: Request):
         sync_date = data.get("date", yesterday)
 
         synced: list[str] = []
+        skipped: list[str] = []
 
         for field, (name, unit, ttype) in _HEALTH_FIELDS.items():
             value = data.get(field)
             if value is None:
+                continue
+
+            # Slaap auto-conversie: als > 24 → waarschijnlijk minuten
+            if field == "sleep_hours" and float(value) > 24:
+                logger.info("health/sync — slaap %s → %.1f uur (was minuten)", value, float(value) / 60)
+                value = round(float(value) / 60, 1)
+
+            # Negeer nullen (Shortcut stuurt 0 als data ontbreekt)
+            if float(value) == 0:
+                skipped.append(name)
                 continue
 
             # Zoek of maak tracker aan
@@ -1226,7 +1247,12 @@ async def health_sync(request: Request):
             synced.append(name)
 
         await db.commit()
-        return JSONResponse({"ok": True, "synced": synced, "date": sync_date})
+        result = {"ok": True, "synced": synced, "skipped": skipped, "date": sync_date}
+        logger.info("health/sync — resultaat: %s", json.dumps(result))
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("health/sync — fout bij verwerken: %s", e, exc_info=True)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
     finally:
         await db.close()
 
