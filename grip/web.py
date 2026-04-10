@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("grip.health")
 
 from fastapi import FastAPI, Form, Request
