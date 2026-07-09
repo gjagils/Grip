@@ -15,9 +15,14 @@
 <body>
     <header class="app-header">
         <span class="app-logo">Grip</span>
-        <a href="/trackers" class="app-header-icon" title="Trackers">
-            <span class="material-symbols-outlined">bar_chart</span>
-        </a>
+        <div style="display: flex; gap: 0.25rem;">
+            <a href="/health" class="app-header-icon" title="Gezondheid">
+                <span class="material-symbols-outlined">ecg_heart</span>
+            </a>
+            <a href="/trackers" class="app-header-icon" title="Trackers">
+                <span class="material-symbols-outlined">bar_chart</span>
+            </a>
+        </div>
     </header>
     <div class="container">
         {% block content %}{% endblock %}

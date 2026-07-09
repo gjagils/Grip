@@ -1489,3 +1489,117 @@ async def health_status(request: Request):
         return JSONResponse({"entries": rows})
     finally:
         await db.close()
+
+
+# --- Health Dashboard ---
+
+# Volgorde op de pagina; alles wat niet genoemd is komt erachter
+_HEALTH_METRIC_ORDER = ["Stappen", "Slaap", "Gewicht", "Actieve calorieën",
+                        "Gegeten calorieën", "Beweegminuten", "Staande uren", "Afstand"]
+_HEALTH_LINE_METRICS = {"Gewicht"}  # lijn i.p.v. staafjes
+
+
+@app.get("/health", response_class=HTMLResponse)
+async def health_page(request: Request):
+    """Dashboard met Apple Health-data + sync-status per metric."""
+    db = await get_db()
+    try:
+        today = date.today()
+        window = 30
+        day_list = [(today - timedelta(days=i)).isoformat() for i in range(window - 1, -1, -1)]
+
+        health_names = list(dict.fromkeys(v[0] for v in _HEALTH_FIELDS.values()))
+        placeholders = ",".join("?" * len(health_names))
+        cursor = await db.execute(
+            f"""SELECT id, name, unit, threshold_green, threshold_red, threshold_direction
+                FROM trackers WHERE name IN ({placeholders})""",
+            health_names,
+        )
+        tracker_by_name = {r["name"]: dict(r) for r in await cursor.fetchall()}
+
+        def _avg(vals):
+            vals = [v for v in vals if v is not None]
+            return round(sum(vals) / len(vals), 1) if vals else None
+
+        metrics = []
+        missing = []      # metrics waarvoor nog nooit iets is binnengekomen
+        days_with_data: set[str] = set()
+        overall_last = None
+
+        ordered = [n for n in _HEALTH_METRIC_ORDER if n in health_names] + \
+                  [n for n in health_names if n not in _HEALTH_METRIC_ORDER]
+        for name in ordered:
+            t = tracker_by_name.get(name)
+            if t is None:
+                missing.append(name)
+                continue
+
+            cursor = await db.execute(
+                "SELECT date, value FROM tracker_entries WHERE tracker_id = ? AND date >= ?",
+                (t["id"], day_list[0]),
+            )
+            by_date = {r["date"]: r["value"] for r in await cursor.fetchall()}
+
+            cursor = await db.execute(
+                "SELECT date, value FROM tracker_entries WHERE tracker_id = ? ORDER BY date DESC LIMIT 1",
+                (t["id"],),
+            )
+            last_row = await cursor.fetchone()
+            if last_row is None:
+                missing.append(name)
+                continue
+
+            days_with_data.update(by_date)
+            if overall_last is None or last_row["date"] > overall_last:
+                overall_last = last_row["date"]
+
+            values = [by_date.get(d) for d in day_list]
+            metrics.append({
+                "name": name,
+                "unit": t["unit"],
+                "kind": "line" if name in _HEALTH_LINE_METRICS else "bar",
+                "values": values,
+                "last_value": last_row["value"],
+                "last_date": last_row["date"],
+                "days_ago": (today - date.fromisoformat(last_row["date"])).days,
+                "avg7": _avg(values[-7:]),
+                "prev7": _avg(values[-14:-7]),
+                "threshold_green": t["threshold_green"],
+                "threshold_direction": t["threshold_direction"],
+            })
+
+        # Sync-status: dekking van de laatste 14 dagen + hoe oud de laatste sync is
+        coverage = [{"date": d, "has": d in days_with_data} for d in day_list[-14:]]
+        if overall_last is None:
+            sync_state, sync_label = "none", "nog geen data ontvangen"
+        else:
+            gap = (today - date.fromisoformat(overall_last)).days
+            if gap == 0:
+                sync_state, sync_label = "ok", "laatste sync: vandaag"
+            elif gap == 1:
+                sync_state, sync_label = "ok", "laatste sync: gisteren"
+            elif gap <= 3:
+                sync_state, sync_label = "warn", f"laatste sync: {gap} dagen geleden"
+            else:
+                sync_state, sync_label = "bad", f"laatste sync: {gap} dagen geleden"
+
+        # Metrics die wel bestaan maar al even niets ontvingen (sync-aandachtspunten)
+        stale = [{"name": m["name"], "days_ago": m["days_ago"]}
+                 for m in metrics if m["days_ago"] > 3]
+
+        return templates.TemplateResponse(
+            request,
+            "health.html",
+            {
+                "days": day_list,
+                "metrics": metrics,
+                "coverage": coverage,
+                "received_14": sum(1 for c in coverage if c["has"]),
+                "sync_state": sync_state,
+                "sync_label": sync_label,
+                "stale": stale,
+                "missing": missing,
+            },
+        )
+    finally:
+        await db.close()

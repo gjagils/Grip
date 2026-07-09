@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% set active_nav = "dashboard" %}
+
+{% block title %}Gezondheid — Grip{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <span class="page-header-kicker">Apple Health</span>
+    <h2 class="page-header-title">Gezondheid</h2>
+    <p class="page-header-sub">Laatste 30 dagen uit je Health-sync.</p>
+</div>
+
+{# ── Sync-status ─────────────────────────────────────────── #}
+<div class="card sync-card">
+    <div class="sync-card-top">
+        <span class="sync-dot {{ sync_state }}"></span>
+        <span class="sync-label">{{ sync_label|capitalize }}</span>
+        <span class="sync-count">{{ received_14 }}/14 dagen data</span>
+    </div>
+    <div class="coverage-strip" aria-label="Data-ontvangst laatste 14 dagen">
+        {% for c in coverage %}
+        <span class="coverage-day {{ 'has' if c.has else 'miss' }}" title="{{ c.date }}{{ '' if c.has else ' — geen data' }}"></span>
+        {% endfor %}
+    </div>
+    {% if stale or missing %}
+    <div class="sync-issues">
+        {% for s in stale %}
+        <span class="sync-issue">{{ s.name }}: {{ s.days_ago }}d geleden</span>
+        {% endfor %}
+        {% for name in missing %}
+        <span class="sync-issue never">{{ name }}: nooit ontvangen</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+{% if metrics %}
+<div class="tracker-tile-grid" id="health-grid" style="margin-top: 1rem;"></div>
+<script id="health-data" type="application/json">{{ {"days": days, "metrics": metrics} | tojson | safe }}</script>
+{% else %}
+<div class="card" style="margin-top: 1rem;">
+    <p style="color: var(--text-muted);">Nog geen gezondheidsdata ontvangen. Controleer je Shortcut of Health Auto Export-automation.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ──────────────────────────────────────────────────────────────
+   Health-tegels — 30 dagen per metric (staafjes of lijn)
+   ────────────────────────────────────────────────────────────── */
+(function renderHealthTiles() {
+    const dataEl = document.getElementById('health-data');
+    const grid   = document.getElementById('health-grid');
+    if (!dataEl || !grid) return;
+
+    let payload;
+    try { payload = JSON.parse(dataEl.textContent); } catch (e) { return; }
+    const metrics = payload.metrics || [];
+    if (!metrics.length) return;
+
+    const cs = getComputedStyle(document.documentElement);
+    const COLOR = {
+        orange:  (cs.getPropertyValue('--orange-container') || '#e3743b').trim(),
+        orangeD: (cs.getPropertyValue('--orange') || '#9f4208').trim(),
+        blue:    (cs.getPropertyValue('--blue') || '#5ba4d9').trim(),
+        muted:   (cs.getPropertyValue('--text-muted') || '#7a6d66').trim(),
+        faint:   '#e4ded8',
+        green:   (cs.getPropertyValue('--success') || '#3d8f3d').trim(),
+        red:     (cs.getPropertyValue('--danger') || '#ba1a1a').trim(),
+        bandLine:'rgba(61,143,61,0.45)',
+    };
+    // Per metric een eigen accentkleur, passend bij het palet
+    const ACCENT = {
+        'Stappen': COLOR.orange, 'Actieve calorieën': COLOR.orangeD,
+        'Slaap': COLOR.blue, 'Gewicht': COLOR.muted,
+    };
+
+    function fmt(v, unit) {
+        if (v == null) return '—';
+        const isInt = ['stappen', 'kcal', 'min', 'uur'].includes((unit || '').toLowerCase()) && v >= 10;
+        if (isInt) return Math.round(v).toLocaleString('nl-NL');
+        return (Math.round(v * 10) / 10).toLocaleString('nl-NL');
+    }
+
+    function barChart(m, accent) {
+        const vals = m.values, n = vals.length;
+        const W = 240, H = 56, P = 2, gap = 1.5;
+        const bw = (W - P * 2 - gap * (n - 1)) / n;
+        const nums = vals.filter(v => v != null);
+        const hi = Math.max(...nums, m.threshold_green ?? 0) * 1.05 || 1;
+        let bars = '';
+        vals.forEach((v, i) => {
+            const x = P + i * (bw + gap);
+            if (v == null) {
+                bars += `<rect x="${x}" y="${H - 3}" width="${bw}" height="2" rx="1" fill="${COLOR.faint}"/>`;
+            } else {
+                const h = Math.max(2.5, (v / hi) * (H - 6));
+                const isLast = i === n - 1 || vals.slice(i + 1).every(x => x == null);
+                bars += `<rect x="${x}" y="${H - 2 - h}" width="${bw}" height="${h}" rx="1.5"
+                          fill="${accent}" opacity="${isLast ? 1 : 0.55}"/>`;
+            }
+        });
+        let target = '';
+        if (m.threshold_green != null) {
+            const ty = H - 2 - (m.threshold_green / hi) * (H - 6);
+            target = `<line x1="0" x2="${W}" y1="${ty}" y2="${ty}" stroke="${COLOR.bandLine}" stroke-dasharray="3 3" stroke-width="1"/>`;
+        }
+        return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${bars}${target}</svg>`;
+    }
+
+    function lineChart(m, accent) {
+        const vals = m.values, n = vals.length;
+        const W = 240, H = 56, P = 5;
+        const nums = vals.filter(v => v != null);
+        let lo = Math.min(...nums), hi = Math.max(...nums);
+        if (lo === hi) { lo -= 1; hi += 1; }
+        const pad = (hi - lo) * 0.2; lo -= pad; hi += pad;
+        const x = i => P + (i * (W - P * 2)) / (n - 1);
+        const y = v => H - P - ((v - lo) / (hi - lo)) * (H - P * 2);
+        // Verbind dóór over ontbrekende dagen heen (gewicht meet je niet dagelijks)
+        const pts = vals.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+        const path = pts.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ');
+        const dots = pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="${accent}" stroke="white" stroke-width="1"/>`).join('');
+        return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+            <path d="${path}" fill="none" stroke="${accent}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            ${dots}</svg>`;
+    }
+
+    function renderTile(m) {
+        const accent = ACCENT[m.name] || COLOR.orange;
+
+        // Trend: 7-daags gemiddelde t.o.v. de 7 dagen ervoor
+        let arrow = '→', arrowCls = '';
+        if (m.avg7 != null && m.prev7 != null) {
+            const delta = m.avg7 - m.prev7;
+            const eps = Math.abs(m.avg7) * 0.02 + 0.05;
+            if (Math.abs(delta) > eps) {
+                arrow = delta > 0 ? '↑' : '↓';
+                if (m.threshold_direction) {
+                    const goodDir = m.threshold_direction === 'higher' ? delta > 0 : delta < 0;
+                    arrowCls = goodDir ? 'up' : 'down';
+                }
+            }
+        }
+
+        const staleBadge = m.days_ago > 3
+            ? `<span class="tracker-tile-badge bad">${m.days_ago}d oud</span>`
+            : (m.days_ago > 1 ? `<span class="tracker-tile-badge warn">${m.days_ago}d oud</span>` : '');
+
+        const chart = m.kind === 'line' ? lineChart(m, accent) : barChart(m, accent);
+        const avgText = m.avg7 != null ? `7d gem. ${fmt(m.avg7, m.unit)}${m.unit ? ' ' + m.unit : ''}` : '';
+
+        return `
+            <div class="tracker-tile">
+              <div class="tracker-tile-top">
+                <span class="tracker-tile-label">${m.name}</span>
+                ${staleBadge}
+              </div>
+              <div class="tracker-tile-value">
+                <span class="num">${fmt(m.last_value, m.unit)}</span>
+                ${m.unit ? `<span class="unit">${m.unit}</span>` : ''}
+                <span class="arrow ${arrowCls}">${arrow}</span>
+              </div>
+              <div class="tracker-tile-target">${avgText}</div>
+              <div class="tracker-tile-chart health-chart">${chart}</div>
+            </div>`;
+    }
+
+    grid.innerHTML = metrics.map(renderTile).join('');
+})();
+</script>
+{% endblock %}
