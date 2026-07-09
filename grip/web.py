@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -332,6 +333,10 @@ async def weekreview_page(request: Request):
         week_dates = [(week_start + timedelta(days=i)).isoformat() for i in range(7)]
         day_labels = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"]
 
+        # Vorige week (voor trend-vergelijking)
+        prev_start = week_start - timedelta(days=7)
+        prev_end = week_start - timedelta(days=1)
+
         cursor = await db.execute(
             "SELECT id, name, unit, type, threshold_green, threshold_red, threshold_direction FROM trackers WHERE active = 1 ORDER BY sort_order, id"
         )
@@ -339,11 +344,22 @@ async def weekreview_page(request: Request):
 
         tracker_week = []
         for t in tracker_rows:
+            # Huidige week
             cursor = await db.execute(
                 "SELECT date, value FROM tracker_entries WHERE tracker_id = ? AND date >= ? AND date <= ?",
                 (t["id"], week_dates[0], week_dates[-1]),
             )
             entries = {r["date"]: r["value"] for r in await cursor.fetchall()}
+            week_values = [entries.get(d) for d in week_dates]
+
+            # Vorige week — alleen voor gemiddelde t.b.v. trend
+            cursor = await db.execute(
+                "SELECT value FROM tracker_entries WHERE tracker_id = ? AND date >= ? AND date <= ?",
+                (t["id"], prev_start.isoformat(), prev_end.isoformat()),
+            )
+            prev_values = [r["value"] for r in await cursor.fetchall()]
+            prev_avg = (sum(prev_values) / len(prev_values)) if prev_values else None
+
             tracker_week.append({
                 "id": t["id"],
                 "name": t["name"],
@@ -352,7 +368,8 @@ async def weekreview_page(request: Request):
                 "threshold_green": t["threshold_green"],
                 "threshold_red": t["threshold_red"],
                 "threshold_direction": t["threshold_direction"],
-                "week_values": [entries.get(d) for d in week_dates],
+                "week_values": week_values,
+                "prev_avg": prev_avg,
             })
 
         return templates.TemplateResponse(
@@ -1168,7 +1185,84 @@ _HEALTH_FIELDS = {
     "stand_hours":        ("Staande uren",           "uur",     "number"),
     "sleep_hours":        ("Slaap",                  "uur",     "number"),
     "distance_km":        ("Afstand",                "km",      "number"),
+    "weight":             ("Gewicht",                "kg",      "number"),
+    "weight_kg":          ("Gewicht",                "kg",      "number"),  # alias
+    "body_weight":        ("Gewicht",                "kg",      "number"),  # alias
 }
+
+
+# Velden die we NIET willen overslaan bij waarde 0 (een gewicht van 0 is fout, maar
+# voor andere metrics interpreteren we 0 als "geen data"). Voor gewicht behandelen
+# we 0 nog steeds als ontbrekend.
+_ZERO_AS_MISSING = True  # alle metrics: 0 = geen data
+
+
+def _sync_auth_error(request: Request) -> JSONResponse | None:
+    """
+    Optionele beveiliging van de health-endpoints. Als de env-var HEALTH_SYNC_TOKEN
+    gezet is, moet de client die meesturen in de X-Sync-Token header. Zonder
+    env-var blijven de endpoints open (Tailscale-only opstelling).
+    """
+    expected = os.environ.get("HEALTH_SYNC_TOKEN")
+    if not expected:
+        return None
+    if request.headers.get("X-Sync-Token") == expected:
+        return None
+    logger.warning("health — geweigerd: ontbrekende of foute X-Sync-Token")
+    return JSONResponse({"ok": False, "error": "Ongeldige of ontbrekende X-Sync-Token"}, status_code=401)
+
+
+async def _upsert_health_entry(db, sync_date: str, data: dict) -> tuple[list[str], list[str]]:
+    """
+    Verwerk één dag aan health data. Retourneert (synced_names, skipped_names).
+    `data` bevat de metric-velden (steps, weight, etc.) — eventuele 'date' wordt genegeerd.
+    """
+    synced: list[str] = []
+    skipped: list[str] = []
+
+    for field, (name, unit, ttype) in _HEALTH_FIELDS.items():
+        value = data.get(field)
+        if value is None:
+            continue
+
+        # Slaap auto-conversie: als > 24 → waarschijnlijk minuten
+        if field == "sleep_hours" and float(value) > 24:
+            logger.info("health/sync — slaap %s → %.1f uur (was minuten)", value, float(value) / 60)
+            value = round(float(value) / 60, 1)
+
+        # Negeer nullen (Shortcut stuurt 0 als data ontbreekt)
+        if float(value) == 0:
+            skipped.append(name)
+            continue
+
+        # Zoek of maak tracker aan
+        cursor = await db.execute(
+            "SELECT id FROM trackers WHERE name = ?", (name,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            tracker_id = row["id"]
+        else:
+            cursor = await db.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM trackers"
+            )
+            next_order = (await cursor.fetchone())[0]
+            cursor = await db.execute(
+                "INSERT INTO trackers (name, unit, type, sort_order) VALUES (?, ?, ?, ?)",
+                (name, unit, ttype, next_order),
+            )
+            tracker_id = cursor.lastrowid
+
+        # Upsert waarde
+        await db.execute(
+            """INSERT INTO tracker_entries (tracker_id, date, value)
+               VALUES (?, ?, ?)
+               ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value""",
+            (tracker_id, sync_date, float(value)),
+        )
+        synced.append(name)
+
+    return synced, skipped
 
 
 @app.post("/api/health/sync")
@@ -1176,18 +1270,29 @@ async def health_sync(request: Request):
     """
     Ontvangt gezondheidsdata van Apple Shortcuts.
 
-    Verwacht JSON:
+    Single-day payload (backward compatible):
     {
-      "date": "2026-03-24",          ← gisteren, optioneel (default: gisteren)
+      "date": "2026-04-30",          ← optioneel, default = gisteren
       "steps": 9823,
-      "active_calories": 412,
-      "exercise_minutes": 38,
-      "stand_hours": 11,
+      "weight": 78.4,
       "sleep_hours": 7.2,
-      "distance_km": 7.4
+      ...
     }
-    Alle velden zijn optioneel. Alleen meegestuurde velden worden opgeslagen.
+
+    Multi-day payload (backfill, bv. laatste 5 dagen):
+    {
+      "entries": [
+        {"date": "2026-04-26", "steps": 7000, "weight": 78.6},
+        {"date": "2026-04-27", "steps": 8500, "weight": 78.5},
+        {"date": "2026-04-28", "steps": 9100, "weight": 78.4}
+      ]
+    }
+
+    Alle metric-velden zijn optioneel. Bestaande waarden voor dezelfde dag worden overschreven.
     """
+    if (auth_error := _sync_auth_error(request)) is not None:
+        return auth_error
+
     try:
         data = await request.json()
     except Exception as e:
@@ -1198,57 +1303,29 @@ async def health_sync(request: Request):
 
     db = await get_db()
     try:
-        # Default: gisteren
         yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+        # Multi-day: array van entries
+        if isinstance(data.get("entries"), list):
+            results = []
+            for entry in data["entries"]:
+                if not isinstance(entry, dict):
+                    continue
+                entry_date = entry.get("date") or yesterday
+                synced, skipped = await _upsert_health_entry(db, entry_date, entry)
+                results.append({"date": entry_date, "synced": synced, "skipped": skipped})
+
+            await db.commit()
+            result = {"ok": True, "mode": "multi", "results": results, "days": len(results)}
+            logger.info("health/sync — resultaat: %s", json.dumps(result))
+            return JSONResponse(result)
+
+        # Single-day: bestaande gedrag
         sync_date = data.get("date", yesterday)
-
-        synced: list[str] = []
-        skipped: list[str] = []
-
-        for field, (name, unit, ttype) in _HEALTH_FIELDS.items():
-            value = data.get(field)
-            if value is None:
-                continue
-
-            # Slaap auto-conversie: als > 24 → waarschijnlijk minuten
-            if field == "sleep_hours" and float(value) > 24:
-                logger.info("health/sync — slaap %s → %.1f uur (was minuten)", value, float(value) / 60)
-                value = round(float(value) / 60, 1)
-
-            # Negeer nullen (Shortcut stuurt 0 als data ontbreekt)
-            if float(value) == 0:
-                skipped.append(name)
-                continue
-
-            # Zoek of maak tracker aan
-            cursor = await db.execute(
-                "SELECT id FROM trackers WHERE name = ?", (name,)
-            )
-            row = await cursor.fetchone()
-            if row:
-                tracker_id = row["id"]
-            else:
-                cursor = await db.execute(
-                    "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM trackers"
-                )
-                next_order = (await cursor.fetchone())[0]
-                cursor = await db.execute(
-                    "INSERT INTO trackers (name, unit, type, sort_order) VALUES (?, ?, ?, ?)",
-                    (name, unit, ttype, next_order),
-                )
-                tracker_id = cursor.lastrowid
-
-            # Upsert waarde
-            await db.execute(
-                """INSERT INTO tracker_entries (tracker_id, date, value)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value""",
-                (tracker_id, sync_date, float(value)),
-            )
-            synced.append(name)
+        synced, skipped = await _upsert_health_entry(db, sync_date, data)
 
         await db.commit()
-        result = {"ok": True, "synced": synced, "skipped": skipped, "date": sync_date}
+        result = {"ok": True, "mode": "single", "synced": synced, "skipped": skipped, "date": sync_date}
         logger.info("health/sync — resultaat: %s", json.dumps(result))
         return JSONResponse(result)
     except Exception as e:
@@ -1258,9 +1335,143 @@ async def health_sync(request: Request):
         await db.close()
 
 
+# Health Auto Export metric-naam → veldnaam in _HEALTH_FIELDS
+_HAE_METRICS = {
+    "step_count":               "steps",
+    "active_energy":            "active_calories",
+    "dietary_energy":           "kcal",
+    "apple_exercise_time":      "exercise_minutes",
+    "apple_stand_hour":         "stand_hours",
+    "apple_stand_time":         "stand_hours",
+    "sleep_analysis":           "sleep_hours",
+    "walking_running_distance": "distance_km",
+    "weight_body_mass":         "weight",
+}
+
+# Metrics waarvoor datapunten binnen één dag opgeteld worden; voor de rest
+# (gewicht) nemen we het gemiddelde van de metingen.
+_HAE_CUMULATIVE = {"steps", "active_calories", "kcal", "exercise_minutes",
+                   "stand_hours", "sleep_hours", "distance_km"}
+
+
+@app.post("/api/health/import/hae")
+async def health_import_hae(request: Request):
+    """
+    Ontvangt exports van de Health Auto Export app (REST API automation).
+
+    Verwacht formaat:
+    {
+      "data": {
+        "metrics": [
+          {"name": "step_count", "units": "count",
+           "data": [{"date": "2026-07-08 00:00:00 +0200", "qty": 9823}, ...]},
+          ...
+        ]
+      }
+    }
+
+    Datapunten worden per dag geaggregeerd (som, gewicht: gemiddelde) en via
+    dezelfde logica als /api/health/sync opgeslagen.
+    """
+    if (auth_error := _sync_auth_error(request)) is not None:
+        return auth_error
+
+    try:
+        payload = await request.json()
+    except Exception as e:
+        logger.error("health/import/hae — ongeldige JSON: %s", e)
+        return JSONResponse({"ok": False, "error": f"Ongeldige JSON: {e}"}, status_code=400)
+
+    metrics = (payload.get("data") or {}).get("metrics")
+    if not isinstance(metrics, list):
+        return JSONResponse(
+            {"ok": False, "error": "Geen 'data.metrics' gevonden — is dit een Health Auto Export payload?"},
+            status_code=400,
+        )
+
+    days: dict[str, dict[str, float]] = {}
+    weight_counts: dict[str, int] = {}
+    unknown_metrics: list[str] = []
+
+    for metric in metrics:
+        if not isinstance(metric, dict):
+            continue
+        name = metric.get("name", "")
+        field = _HAE_METRICS.get(name)
+        if field is None:
+            unknown_metrics.append(name)
+            continue
+        units = str(metric.get("units") or "").lower()
+
+        for point in metric.get("data", []):
+            if not isinstance(point, dict):
+                continue
+            day = str(point.get("date", ""))[:10]  # "2026-07-08 00:00:00 +0200" → "2026-07-08"
+            if len(day) != 10:
+                continue
+
+            qty = point.get("qty")
+            if field == "sleep_hours" and qty is None:
+                # sleep_analysis heeft geen qty maar asleep/totalSleep (in uren)
+                qty = point.get("totalSleep") or point.get("asleep")
+            if qty is None:
+                continue
+
+            try:
+                value = float(qty)
+            except (TypeError, ValueError):
+                continue
+
+            # Eenheden normaliseren naar wat _HEALTH_FIELDS verwacht
+            if field == "distance_km" and units == "mi":
+                value *= 1.60934
+            elif field == "distance_km" and units == "m":
+                value /= 1000
+            elif field == "weight" and units in ("lb", "lbs"):
+                value *= 0.453592
+            elif field in ("active_calories", "kcal") and units == "kj":
+                value /= 4.184
+            elif field == "sleep_hours" and units == "min":
+                value /= 60
+
+            bucket = days.setdefault(day, {})
+            if field in _HAE_CUMULATIVE:
+                bucket[field] = bucket.get(field, 0.0) + value
+            else:
+                # gewicht: lopend gemiddelde over metingen op dezelfde dag
+                count = weight_counts.get(day, 0)
+                bucket[field] = (bucket.get(field, 0.0) * count + value) / (count + 1)
+                weight_counts[day] = count + 1
+
+    logger.info("health/import/hae — %d dag(en), overgeslagen metrics: %s",
+                len(days), unknown_metrics or "geen")
+
+    db = await get_db()
+    try:
+        results = []
+        for day in sorted(days):
+            entry = {k: round(v, 2) for k, v in days[day].items()}
+            synced, skipped = await _upsert_health_entry(db, day, entry)
+            results.append({"date": day, "synced": synced, "skipped": skipped})
+
+        await db.commit()
+        result = {"ok": True, "mode": "hae", "results": results, "days": len(results),
+                  "unknown_metrics": unknown_metrics}
+        logger.info("health/import/hae — resultaat: %s", json.dumps(result))
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("health/import/hae — fout bij verwerken: %s", e, exc_info=True)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    finally:
+        await db.close()
+
+
 @app.get("/api/health/status")
 async def health_status(request: Request):
     """Geeft de meest recente health-sync terug — handig voor testen vanuit Shortcuts."""
+    if (auth_error := _sync_auth_error(request)) is not None:
+        return auth_error
+
     db = await get_db()
     try:
         health_names = [v[0] for v in _HEALTH_FIELDS.values()]

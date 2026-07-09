@@ -7,6 +7,7 @@ services:
       - "8921:8000"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - HEALTH_SYNC_TOKEN=${HEALTH_SYNC_TOKEN}
     volumes:
       - grip-data:/data
 
