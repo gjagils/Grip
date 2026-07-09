@@ -65,42 +65,13 @@
 </form>
 
 {% if tracker_week %}
-<div class="card" style="margin-top: 1.5rem; overflow-x: auto;">
+<div class="card tracker-tiles-card" style="margin-top: 1.5rem;">
     <h2 style="margin-bottom: 1rem;">📊 Trackers deze week</h2>
-    <table class="tracker-week-table">
-        <thead>
-            <tr>
-                <th>Tracker</th>
-                {% for label in day_labels %}<th>{{ label }}</th>{% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for t in tracker_week %}
-            <tr>
-                <td class="tracker-week-name">{{ t.name }}{% if t.unit %} <span class="tracker-unit">({{ t.unit }})</span>{% endif %}</td>
-                {% for val in t.week_values %}
-                {% if val is not none %}
-                    {% if t.threshold_green is not none and t.threshold_red is not none %}
-                        {% if t.threshold_direction == 'lower' %}
-                            {% if val <= t.threshold_green %}{% set cell_class = 'cell-green' %}
-                            {% elif val > t.threshold_red %}{% set cell_class = 'cell-red' %}
-                            {% else %}{% set cell_class = 'cell-orange' %}{% endif %}
-                        {% else %}
-                            {% if val >= t.threshold_green %}{% set cell_class = 'cell-green' %}
-                            {% elif val < t.threshold_red %}{% set cell_class = 'cell-red' %}
-                            {% else %}{% set cell_class = 'cell-orange' %}{% endif %}
-                        {% endif %}
-                    {% else %}{% set cell_class = '' %}{% endif %}
-                    <td class="{{ cell_class }}">{{ val|int if t.type == 'number' else '✓' }}</td>
-                {% else %}
-                    <td class="cell-empty">–</td>
-                {% endif %}
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="tracker-tile-grid" id="tracker-tile-grid"></div>
 </div>
+
+{# Data naar JS via JSON-script tag — kanonieke aanpak voor Jinja #}
+<script id="tracker-week-data" type="application/json">{{ tracker_week | tojson | safe }}</script>
 {% endif %}
 
 {% if existing %}
@@ -147,5 +118,174 @@ async function askClaude() {
         loading.classList.remove('active');
     }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Tracker-tegels (variant B — Journal tiles)
+   ────────────────────────────────────────────────────────────── */
+(function renderTrackerTiles() {
+    const dataEl = document.getElementById('tracker-week-data');
+    const grid   = document.getElementById('tracker-tile-grid');
+    if (!dataEl || !grid) return;
+
+    let trackers;
+    try { trackers = JSON.parse(dataEl.textContent); } catch (e) { return; }
+    if (!Array.isArray(trackers) || !trackers.length) return;
+
+    const cs = getComputedStyle(document.documentElement);
+    const COLOR = {
+        green:  (cs.getPropertyValue('--success') || '#3d8f3d').trim(),
+        warn:   '#b07a00',
+        red:    (cs.getPropertyValue('--danger')  || '#ba1a1a').trim(),
+        muted:  (cs.getPropertyValue('--text-muted') || '#7a6d66').trim(),
+        faint:  '#d9d4cf',
+        band:     'rgba(61,143,61,0.08)',
+        bandLine: 'rgba(61,143,61,0.35)',
+    };
+
+    function classify(v, t) {
+        if (v == null) return 'empty';
+        if (t.threshold_green == null || t.threshold_red == null) return 'neutral';
+        if (t.threshold_direction === 'lower') {
+            if (v <= t.threshold_green) return 'good';
+            if (v >  t.threshold_red)   return 'bad';
+            return 'warn';
+        }
+        if (v >= t.threshold_green) return 'good';
+        if (v <  t.threshold_red)   return 'bad';
+        return 'warn';
+    }
+    function colorFor(cls) {
+        return cls === 'good' ? COLOR.green
+             : cls === 'warn' ? COLOR.warn
+             : cls === 'bad'  ? COLOR.red
+             : COLOR.faint;
+    }
+    function fmt(v, t) {
+        if (v == null) return '—';
+        if (t.type !== 'number') return '✓';
+        const isInt = ['stappen', 'kcal', 'min'].includes((t.unit || '').toLowerCase());
+        if (isInt) return Math.round(v).toLocaleString('nl-NL');
+        return (Math.round(v * 10) / 10).toString().replace('.', ',');
+    }
+    function range(values, tg, tr) {
+        const all = values.filter(v => v != null);
+        if (!all.length) return [0, 1];
+        let lo = Math.min(...all, tg ?? Infinity, tr ?? Infinity);
+        let hi = Math.max(...all, tg ?? -Infinity, tr ?? -Infinity);
+        if (lo === hi) { lo -= 1; hi += 1; }
+        const pad = (hi - lo) * 0.18;
+        return [lo - pad, hi + pad];
+    }
+    function targetText(t) {
+        if (t.threshold_green == null) return '';
+        const sym = t.threshold_direction === 'lower' ? '≤' : '≥';
+        const val = (Math.round(t.threshold_green * 10) / 10).toString().replace('.', ',');
+        return `doel ${sym} ${val}${t.unit ? ' ' + t.unit : ''}`;
+    }
+
+    function renderTile(t) {
+        const week = t.week_values || [];
+        const W = 240, H = 44, P = 4;
+        const [lo, hi] = range(week, t.threshold_green, t.threshold_red);
+        const x = i => P + (i * (W - P*2)) / (week.length - 1);
+        const y = v => H - P - ((v - lo) / (hi - lo)) * (H - P*2);
+
+        const pts = week.map((v,i) => v == null ? null : [x(i), y(v)]);
+
+        // Pad — knip op gaps
+        const pathSegs = [];
+        let cur = [];
+        pts.forEach(p => {
+            if (p) cur.push(p);
+            else { if (cur.length) pathSegs.push(cur); cur = []; }
+        });
+        if (cur.length) pathSegs.push(cur);
+        const path = pathSegs.map(seg =>
+            seg.map((p,i) => (i === 0 ? `M ${p[0]} ${p[1]}` : `L ${p[0]} ${p[1]}`)).join(' ')
+        ).join(' ');
+        const areaPath = pathSegs.map(seg => {
+            const d = seg.map((p,i)=> (i===0?`M ${p[0]} ${p[1]}`:`L ${p[0]} ${p[1]}`)).join(' ');
+            const last = seg[seg.length-1], first = seg[0];
+            return `${d} L ${last[0]} ${H-P} L ${first[0]} ${H-P} Z`;
+        }).join(' ');
+
+        // Drempelband
+        let zoneY1, zoneY2, tgLine = null;
+        if (t.threshold_green != null) {
+            tgLine = y(t.threshold_green);
+            if (t.threshold_direction === 'higher') { zoneY1 = P;     zoneY2 = tgLine; }
+            else                                    { zoneY1 = tgLine; zoneY2 = H - P;  }
+        }
+        const zoneRect = (zoneY1 != null && zoneY2 != null)
+            ? `<rect x="0" y="${Math.min(zoneY1,zoneY2)}" width="${W}" height="${Math.abs(zoneY2-zoneY1)}" fill="${COLOR.band}"/>` : '';
+        const tgLineSvg = (tgLine != null)
+            ? `<line x1="0" x2="${W}" y1="${tgLine}" y2="${tgLine}" stroke="${COLOR.bandLine}" stroke-dasharray="2 3" stroke-width="1"/>` : '';
+
+        const dots = pts.map((p,i) => {
+            if (!p) return '';
+            const cls = classify(week[i], t);
+            return `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="${colorFor(cls)}" stroke="white" stroke-width="1.2"/>`;
+        }).join('');
+
+        // Huidige waarde = laatste niet-null
+        let last = null, lastIdx = -1;
+        for (let i = week.length - 1; i >= 0; i--) {
+            if (week[i] != null) { last = week[i]; lastIdx = i; break; }
+        }
+        const lastCls = classify(last, t);
+
+        // Trend t.o.v. vorige week
+        const filled = week.filter(v => v != null);
+        let arrow = '→', arrowCls = '';
+        if (filled.length && t.prev_avg != null) {
+            const avg = filled.reduce((a,b)=>a+b,0) / filled.length;
+            const delta = avg - t.prev_avg;
+            const eps = Math.abs(avg) * 0.01 + 0.5;
+            if (Math.abs(delta) > eps) {
+                const goodDir = (t.threshold_direction === 'higher') ? (delta > 0) : (delta < 0);
+                arrow = delta > 0 ? '↑' : '↓';
+                arrowCls = goodDir ? 'up' : 'down';
+            }
+        }
+
+        const dayLabels = ['m','d','w','d','v','z','z'];
+        const dayCells = dayLabels.map((d,i) => {
+            const v = week[i];
+            const cls = classify(v, t);
+            const dot = v == null ? '·' : (cls === 'good' ? '●' : cls === 'warn' ? '◐' : cls === 'bad' ? '○' : '·');
+            return `<span><span style="color:${colorFor(cls)}">${dot}</span><br><span>${d}</span></span>`;
+        }).join('');
+
+        const badgeMap = { good: 'in doel', warn: 'grens', bad: 'buiten doel', empty: 'geen data', neutral: '' };
+        const badgeCls = lastCls === 'good' ? 'good' : lastCls === 'warn' ? 'warn' : lastCls === 'bad' ? 'bad' : 'muted';
+
+        return `
+            <div class="tracker-tile">
+              <div class="tracker-tile-top">
+                <span class="tracker-tile-label">${t.name}</span>
+                ${badgeMap[lastCls] ? `<span class="tracker-tile-badge ${badgeCls}">${badgeMap[lastCls]}</span>` : ''}
+              </div>
+              <div class="tracker-tile-value">
+                <span class="num">${fmt(last, t)}</span>
+                ${t.unit ? `<span class="unit">${t.unit}</span>` : ''}
+                <span class="arrow ${arrowCls}">${arrow}</span>
+              </div>
+              <div class="tracker-tile-target">${targetText(t)}</div>
+              <div class="tracker-tile-chart">
+                <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+                  ${zoneRect}
+                  ${tgLineSvg}
+                  <path d="${areaPath}" fill="${COLOR.muted}" opacity="0.06"/>
+                  <path d="${path}" fill="none" stroke="${COLOR.muted}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  ${dots}
+                </svg>
+              </div>
+              <div class="tracker-tile-days">${dayCells}</div>
+            </div>
+        `;
+    }
+
+    grid.innerHTML = trackers.map(renderTile).join('');
+})();
 </script>
 {% endblock %}

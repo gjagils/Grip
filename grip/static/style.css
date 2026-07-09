@@ -1611,6 +1611,113 @@ details summary:hover {
 .cell-red { background: #d9534f18; color: #a02020; font-weight: 600; border-radius: 4px; }
 .cell-empty { color: var(--text-muted); }
 
+/* ── Tracker tegels (weekreview, variant B — Journal tiles) ── */
+.tracker-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+}
+@media (max-width: 480px) {
+    .tracker-tile-grid { grid-template-columns: 1fr; }
+}
+
+.tracker-tile {
+    background: var(--surface-low);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.85rem 0.95rem 0.95rem;
+    position: relative;
+    overflow: hidden;
+}
+.tracker-tile::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--orange-soft), transparent);
+}
+
+.tracker-tile-top {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin-bottom: 0.3rem;
+}
+.tracker-tile-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.tracker-tile-badge {
+    margin-left: auto;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.tracker-tile-badge.good { background: var(--success-soft); color: var(--success); }
+.tracker-tile-badge.warn { background: rgba(176,122,0,0.10); color: #b07a00; }
+.tracker-tile-badge.bad  { background: var(--danger-soft);  color: var(--danger); }
+.tracker-tile-badge.muted{ background: var(--surface-2);    color: var(--text-muted); }
+
+.tracker-tile-value {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    font-weight: 700;
+    font-size: 1.65rem;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+}
+.tracker-tile-value .unit {
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    letter-spacing: 0;
+}
+.tracker-tile-value .arrow {
+    margin-left: auto;
+    font-family: var(--handwritten);
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    line-height: 1;
+}
+.tracker-tile-value .arrow.up   { color: var(--success); }
+.tracker-tile-value .arrow.down { color: var(--danger);  }
+
+.tracker-tile-target {
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.tracker-tile-chart {
+    margin-top: 0.55rem;
+    height: 44px;
+}
+.tracker-tile-chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.tracker-tile-days {
+    margin-top: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    font-size: 0.6rem;
+    color: var(--text-faint, #a89d96);
+    text-align: center;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+}
+
 /* ── Kwartaalreview ── */
 
 .quarterly-header {
