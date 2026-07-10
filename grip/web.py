@@ -34,12 +34,6 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 # --- Dashboard ---
 
 
-@app.get("/design", response_class=HTMLResponse)
-async def design_preview(request: Request):
-    """Tijdelijke previewpagina: drie kleurrichtingen naast elkaar."""
-    return templates.TemplateResponse(request, "design_preview.html", {})
-
-
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     db = await get_db()
