@@ -4,7 +4,7 @@
     "description": "Dagelijkse check-ins, weekreviews en doelen",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#f5f7fa",
+    "background_color": "#e9eff8",
     "theme_color": "#34527e",
     "icons": [
         {
