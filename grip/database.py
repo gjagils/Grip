@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS check_ins (
     today_main_goal TEXT,
     today_joy TEXT,
     claude_question TEXT,
-    claude_question_answer TEXT
+    claude_question_answer TEXT,
+    claude_followup TEXT,
+    claude_followup_answer TEXT
 );
 
 CREATE TABLE IF NOT EXISTS check_in_answers (
@@ -235,6 +237,7 @@ async def _migrate_db(db: aiosqlite.Connection):
         ("yesterday_goal_done", "INTEGER"), ("yesterday_goal_note", "TEXT"),
         ("today_main_goal", "TEXT"), ("today_joy", "TEXT"),
         ("claude_question", "TEXT"), ("claude_question_answer", "TEXT"),
+        ("claude_followup", "TEXT"), ("claude_followup_answer", "TEXT"),
     ]:
         if col not in checkin_cols:
             await db.execute(f"ALTER TABLE check_ins ADD COLUMN {col} {coltype}")

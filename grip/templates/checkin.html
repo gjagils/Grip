@@ -144,7 +144,24 @@
             </label>
             <input type="hidden" name="claude_question" id="claude-question-hidden"
                    value="{{ existing.claude_question if existing and existing.claude_question else '' }}">
-            <textarea name="claude_question_answer" rows="2" placeholder="Jouw antwoord...">{{ existing.claude_question_answer if existing and existing.claude_question_answer else '' }}</textarea>
+            <textarea name="claude_question_answer" id="claude-answer" rows="2" placeholder="Jouw antwoord...">{{ existing.claude_question_answer if existing and existing.claude_question_answer else '' }}</textarea>
+
+            {% set has_followup = existing and existing.claude_followup %}
+            <div id="followup-btn-row" style="margin-top: 0.5rem; {% if has_followup %}display:none;{% endif %}">
+                <button type="button" class="btn btn-small btn-blue" id="followup-btn"
+                        onclick="askFollowup()" disabled>&#8627; Doorvraag van Claude</button>
+                <div class="loading" id="followup-loading">Even denken...</div>
+            </div>
+
+            <div id="followup-block" style="margin-top: 0.75rem; {% if not has_followup %}display:none;{% endif %}">
+                <label style="display: block; margin-bottom: 0.35rem;">
+                    <span class="reflect-kicker claude">Doorvraag</span>
+                    <span id="followup-q-text">{{ existing.claude_followup if has_followup else '' }}</span>
+                </label>
+                <input type="hidden" name="claude_followup" id="followup-hidden"
+                       value="{{ existing.claude_followup if has_followup else '' }}">
+                <textarea name="claude_followup_answer" rows="2" placeholder="Jouw antwoord...">{{ existing.claude_followup_answer if existing and existing.claude_followup_answer else '' }}</textarea>
+            </div>
         </div>
     </div>
 
@@ -191,6 +208,42 @@ async function loadClaudeQuestion() {
 }
 loadClaudeQuestion();
 {% endif %}
+
+// Doorvraag-knop pas actief zodra er een antwoord staat
+const answerEl = document.getElementById('claude-answer');
+const followupBtn = document.getElementById('followup-btn');
+function syncFollowupBtn() {
+    if (followupBtn) followupBtn.disabled = answerEl.value.trim().length < 3;
+}
+if (answerEl) { answerEl.addEventListener('input', syncFollowupBtn); syncFollowupBtn(); }
+
+async function askFollowup() {
+    const loading = document.getElementById('followup-loading');
+    followupBtn.disabled = true;
+    loading.classList.add('active');
+    try {
+        const res = await fetch('/api/checkin/followup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                question: document.getElementById('claude-question-hidden').value,
+                answer: answerEl.value.trim(),
+            }),
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        document.getElementById('followup-q-text').textContent = data.followup;
+        document.getElementById('followup-hidden').value = data.followup;
+        document.getElementById('followup-btn-row').style.display = 'none';
+        document.getElementById('followup-block').style.display = '';
+        document.querySelector('#followup-block textarea').focus();
+    } catch {
+        followupBtn.disabled = false;
+        alert('Doorvraag ophalen mislukte.');
+    } finally {
+        loading.classList.remove('active');
+    }
+}
 
 async function askClaude() {
     const btn = document.getElementById('claude-btn');

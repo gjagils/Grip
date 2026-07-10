@@ -305,6 +305,9 @@ async def reflect_checkin(db: aiosqlite.Connection) -> str:
         if ci["claude_question"] and ci["claude_question_answer"]:
             parts.append(f"- Coach vroeg: {ci['claude_question']}")
             parts.append(f"  Antwoord: {ci['claude_question_answer']}")
+        if ci["claude_followup"] and ci["claude_followup_answer"]:
+            parts.append(f"- Doorvraag: {ci['claude_followup']}")
+            parts.append(f"  Antwoord: {ci['claude_followup_answer']}")
 
     cursor = await db.execute(
         "SELECT question_text, answer FROM reflection_answers WHERE date = ? AND answer != ''",
@@ -466,6 +469,32 @@ async def generate_checkin_question(db: aiosqlite.Connection, avoid: list[str] |
                     f"Invalshoek van vandaag — {tone}.\n"
                     f"Eisen: verwijs naar iets concreets uit de data (een uitspraak, doel of patroon), "
                     f"nooit vaag of algemeen, maximaal 25 woorden, alleen de vraag zelf zonder inleiding.{avoid_text}"
+                ),
+            }
+        ],
+    )
+    return response.content[0].text.strip()
+
+
+async def generate_followup(db: aiosqlite.Connection, question: str, answer: str) -> str:
+    """Eén korte doorvraag op het antwoord van de gebruiker — max één ronde,
+    het gesprek moet in twee minuten passen."""
+    context = await _build_context(db, days=7)
+
+    response = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=100,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"{context}\n\n---\n"
+                    f"Je stelde de gebruiker net deze vraag: \"{question}\"\n"
+                    f"Antwoord van de gebruiker: \"{answer}\"\n\n"
+                    f"Stel één korte doorvraag die het antwoord serieus neemt en één laag "
+                    f"dieper gaat — naar de kern, niet naar details. Maximaal 20 woorden, "
+                    f"alleen de vraag zelf."
                 ),
             }
         ],

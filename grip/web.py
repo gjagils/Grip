@@ -225,6 +225,7 @@ async def save_checkin(request: Request):
                 yesterday_goal_done = ?, yesterday_goal_note = ?,
                 today_main_goal = ?,
                 claude_question = ?, claude_question_answer = ?,
+                claude_followup = ?, claude_followup_answer = ?,
                 completed = 1
                WHERE id = ?""",
             (
@@ -233,6 +234,8 @@ async def save_checkin(request: Request):
                 form.get("today_main_goal"),
                 form.get("claude_question"),
                 form.get("claude_question_answer"),
+                form.get("claude_followup"),
+                form.get("claude_followup_answer"),
                 checkin_id,
             ),
         )
@@ -327,6 +330,7 @@ async def checkin_history(request: Request):
         cursor = await db.execute(
             """SELECT date, today_main_goal, yesterday_goal_done, yesterday_goal_note,
                       claude_question, claude_question_answer,
+                      claude_followup, claude_followup_answer,
                       yesterday_highlight, yesterday_different, today_joy
                FROM check_ins ORDER BY date DESC LIMIT 60"""
         )
@@ -356,6 +360,8 @@ async def checkin_history(request: Request):
                     entries.append({"q": label, "a": ci[field]})
             if ci.get("claude_question") and ci.get("claude_question_answer"):
                 entries.append({"q": ci["claude_question"], "a": ci["claude_question_answer"], "claude": True})
+            if ci.get("claude_followup") and ci.get("claude_followup_answer"):
+                entries.append({"q": ci["claude_followup"], "a": ci["claude_followup_answer"], "claude": True})
 
             next_day = (date.fromisoformat(ci["date"]) + timedelta(days=1)).isoformat()
             next_ci = by_date.get(next_day)
@@ -929,6 +935,26 @@ async def checkin_question(request: Request):
         )
         await db.commit()
         return JSONResponse({"question": question, "cached": False})
+    finally:
+        await db.close()
+
+
+@app.post("/api/checkin/followup")
+async def checkin_followup(request: Request):
+    """Genereert één doorvraag op het antwoord op Claude's dagvraag."""
+    try:
+        body = await request.json()
+        question = (body.get("question") or "").strip()
+        answer = (body.get("answer") or "").strip()
+    except Exception:
+        return JSONResponse({"error": "Ongeldige JSON"}, status_code=400)
+    if not question or not answer:
+        return JSONResponse({"error": "Vraag en antwoord zijn verplicht"}, status_code=400)
+
+    db = await get_db()
+    try:
+        followup = await insights.generate_followup(db, question, answer)
+        return JSONResponse({"followup": followup})
     finally:
         await db.close()
 
