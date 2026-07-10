@@ -175,6 +175,97 @@ async def _build_context(db: aiosqlite.Connection, days: int = 30) -> str:
     return "\n".join(parts) if parts else "Nog geen data beschikbaar."
 
 
+async def build_signals(db: aiosqlite.Connection) -> str:
+    """
+    Bereken expliciete signalen voor de AI: gaten in de logging, trends per
+    tracker, check-in-ritme en doel-haalratio. De AI hoeft ze zo niet toevallig
+    in ruwe data te ontdekken — hij krijgt ze aangereikt.
+    """
+    today = date.today()
+    gaps: list[str] = []
+    trends: list[str] = []
+
+    cursor = await db.execute("SELECT id, name, unit FROM trackers WHERE active = 1")
+    trackers = [dict(r) for r in await cursor.fetchall()]
+
+    for t in trackers:
+        cursor = await db.execute(
+            "SELECT MAX(date) FROM tracker_entries WHERE tracker_id = ?", (t["id"],)
+        )
+        last = (await cursor.fetchone())[0]
+        if last is None:
+            continue  # nooit gelogd — geen zinvol signaal
+
+        days_ago = (today - date.fromisoformat(last)).days
+        if days_ago >= 3:
+            gaps.append(f"- {t['name']}: al {days_ago} dagen niet gelogd (laatst {last})")
+
+        # 7-daags gemiddelde vs. de 7 dagen ervoor
+        async def _avg(start: date, end: date) -> tuple[float | None, int]:
+            cursor = await db.execute(
+                """SELECT AVG(value), COUNT(*) FROM tracker_entries
+                   WHERE tracker_id = ? AND date >= ? AND date <= ?""",
+                (t["id"], start.isoformat(), end.isoformat()),
+            )
+            row = await cursor.fetchone()
+            return row[0], row[1]
+
+        cur_avg, cur_n = await _avg(today - timedelta(days=6), today)
+        prev_avg, prev_n = await _avg(today - timedelta(days=13), today - timedelta(days=7))
+        if cur_avg is not None and prev_avg is not None and cur_n >= 3 and prev_n >= 3:
+            if prev_avg != 0:
+                change = (cur_avg - prev_avg) / abs(prev_avg)
+                if abs(change) >= 0.10:
+                    arrow = "gestegen" if change > 0 else "gedaald"
+                    unit = f" {t['unit']}" if t["unit"] else ""
+                    trends.append(
+                        f"- {t['name']}: 7-daags gemiddelde {cur_avg:.1f}{unit}, "
+                        f"{abs(change) * 100:.0f}% {arrow} t.o.v. de week ervoor ({prev_avg:.1f})"
+                    )
+
+    # Check-in-ritme: streak en gemiste dagen afgelopen week
+    cursor = await db.execute(
+        "SELECT date FROM check_ins WHERE completed = 1 ORDER BY date DESC LIMIT 60"
+    )
+    ci_dates = {r["date"] for r in await cursor.fetchall()}
+    streak = 0
+    d = today if today.isoformat() in ci_dates else today - timedelta(days=1)
+    while d.isoformat() in ci_dates:
+        streak += 1
+        d -= timedelta(days=1)
+    missed_week = sum(
+        1 for i in range(1, 8)
+        if (today - timedelta(days=i)).isoformat() not in ci_dates
+    )
+
+    ritme = [f"- Check-in streak: {streak} dag(en)"]
+    if missed_week:
+        ritme.append(f"- Afgelopen 7 dagen {missed_week} check-in(s) gemist")
+
+    # Doel-haalratio afgelopen 7 dagen
+    cursor = await db.execute(
+        """SELECT yesterday_goal_done FROM check_ins
+           WHERE date >= ? AND yesterday_goal_done IS NOT NULL""",
+        ((today - timedelta(days=7)).isoformat(),),
+    )
+    scores = [r[0] for r in await cursor.fetchall()]
+    if scores:
+        ritme.append(
+            f"- Dagdoelen afgelopen week: {sum(scores):.1f} van {len(scores)} gehaald"
+        )
+
+    parts = ["## Signalen (vandaag berekend)"]
+    if gaps:
+        parts.append("### Gaten in de logging")
+        parts.extend(gaps)
+    if trends:
+        parts.append("### Trends")
+        parts.extend(trends)
+    parts.append("### Ritme")
+    parts.extend(ritme)
+    return "\n".join(parts)
+
+
 async def ask(db: aiosqlite.Connection, question: str) -> str:
     """Stel een vraag aan Claude met de check-in context."""
     context = await _build_context(db)
@@ -229,6 +320,8 @@ async def reflect_checkin(db: aiosqlite.Connection) -> str:
     if tasks:
         parts.append("- Taken vandaag: " + "; ".join(
             f"{t['title']} [{'x' if t['completed'] else ' '}]" for t in tasks))
+
+    parts.append("\n" + await build_signals(db))
 
     cursor = await db.execute(
         "SELECT title FROM goals WHERE type = 'weekly' AND status = 'active' AND year = ? AND week_number = ?",
@@ -341,6 +434,7 @@ async def load_chat_history(db: aiosqlite.Connection, limit: int = 40) -> list[d
 _QUESTION_TONES = [
     "confronterend: benoem een concreet patroon, een uitgesteld doel of een tegenstrijdigheid tussen wat de gebruiker zei en deed, en prik daar doorheen",
     "motiverend: geef energie voor vandaag door aan te sluiten op iets waar de gebruiker naar uitkijkt of aan werkt",
+    "signalerend: pak één opvallend signaal (een gat in de logging, een dalende of stijgende trend, een gemiste reeks) en vraag daar direct naar",
     "vierend: bouw voort op iets dat recent goed ging en vraag hoe dat vaker kan",
     "verdiepend: pak één ding dat de gebruiker recent schreef en vraag daarop door",
 ]
@@ -351,6 +445,8 @@ async def generate_checkin_question(db: aiosqlite.Connection, avoid: list[str] |
     wisselt per dag; `avoid` bevat de rotatievragen van vandaag zodat de
     AI-vraag daar niet mee overlapt."""
     context = await _build_context(db, days=7)
+    signals = await build_signals(db)
+    context = f"{context}\n\n{signals}"
     tone = _QUESTION_TONES[date.today().toordinal() % len(_QUESTION_TONES)]
     avoid_text = ""
     if avoid:

@@ -45,6 +45,12 @@ CREATE TABLE IF NOT EXISTS reflection_questions (
     active INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS daily_questions (
+    date TEXT PRIMARY KEY,
+    question TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS reflection_answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT NOT NULL,

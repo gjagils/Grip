@@ -34,9 +34,24 @@
 
 <form method="POST" action="/api/checkin" id="checkin-form">
 
+    <!-- ══ STEMMING ══ -->
+    <div class="card">
+        <div class="form-group">
+            <label>Hoe voel je je nu?</label>
+            <div class="mood-chips">
+                {% for m in [(1, '😞'), (2, '😕'), (3, '😐'), (4, '🙂'), (5, '😄')] %}
+                <label class="mood-chip">
+                    <input type="radio" name="mood" value="{{ m[0] }}" {% if mood == m[0] %}checked{% endif %}>
+                    <span>{{ m[1] }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
     <!-- ══ BLOK 1: GISTEREN AFRONDEN ══ -->
     {% if yesterday_stats or yesterday_goal or yesterday_tasks %}
-    <div class="checkin-section-label">Gisteren</div>
+    <div class="checkin-section-label" style="margin-top: 1.5rem;">Gisteren</div>
     {% endif %}
 
     {% if yesterday_stats %}

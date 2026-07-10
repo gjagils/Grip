@@ -148,6 +148,16 @@ async def checkin_page(request: Request):
         )
         yesterday_stats = [dict(r) for r in await cursor.fetchall()]
 
+        # Stemming van vandaag (tracker "Stemming", 1-5)
+        cursor = await db.execute(
+            """SELECT te.value FROM tracker_entries te
+               JOIN trackers t ON te.tracker_id = t.id
+               WHERE t.name = 'Stemming' AND te.date = ?""",
+            (today_str,),
+        )
+        mood_row = await cursor.fetchone()
+        mood = int(mood_row["value"]) if mood_row else None
+
         # Reflectievragen van vandaag + eventuele antwoorden (voor bijwerken)
         reflections = await get_reflection_questions(db, today)
         for q in reflections:
@@ -177,6 +187,7 @@ async def checkin_page(request: Request):
                 "yesterday_goal": yesterday_goal,
                 "yesterday_stats": yesterday_stats,
                 "reflections": reflections,
+                "mood": mood,
                 "today_insight": existing_insight["response"] if existing_insight else None,
             },
         )
@@ -225,6 +236,32 @@ async def save_checkin(request: Request):
                 checkin_id,
             ),
         )
+
+        # Stemming (1-5) → tracker "Stemming"
+        mood_raw = form.get("mood", "")
+        if mood_raw in ("1", "2", "3", "4", "5"):
+            cursor = await db.execute("SELECT id FROM trackers WHERE name = 'Stemming'")
+            row = await cursor.fetchone()
+            if row:
+                mood_tracker_id = row["id"]
+            else:
+                cursor = await db.execute(
+                    "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM trackers"
+                )
+                next_order = (await cursor.fetchone())[0]
+                cursor = await db.execute(
+                    """INSERT INTO trackers (name, unit, type, sort_order,
+                                             threshold_green, threshold_red, threshold_direction)
+                       VALUES ('Stemming', '', 'number', ?, 4, 2.5, 'higher')""",
+                    (next_order,),
+                )
+                mood_tracker_id = cursor.lastrowid
+            await db.execute(
+                """INSERT INTO tracker_entries (tracker_id, date, value)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value""",
+                (mood_tracker_id, today, float(mood_raw)),
+            )
 
         # Antwoorden op de reflectievragen van vandaag
         for key, value in form.multi_items():
@@ -870,14 +907,28 @@ async def ask_insight(request: Request):
 
 @app.get("/api/checkin/question")
 async def checkin_question(request: Request):
-    """Genereert een persoonlijke vraag van Claude voor de check-in."""
+    """Claude's vraag van vandaag. Eén keer per dag gegenereerd en gecachet —
+    zo tonen de check-in én de ochtend-nudge dezelfde vraag."""
     db = await get_db()
     try:
+        today = date.today().isoformat()
+        cursor = await db.execute(
+            "SELECT question FROM daily_questions WHERE date = ?", (today,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            return JSONResponse({"question": row["question"], "cached": True})
+
         todays = await get_reflection_questions(db)
         question = await insights.generate_checkin_question(
             db, avoid=[q["text"] for q in todays]
         )
-        return JSONResponse({"question": question})
+        await db.execute(
+            "INSERT OR REPLACE INTO daily_questions (date, question) VALUES (?, ?)",
+            (today, question),
+        )
+        await db.commit()
+        return JSONResponse({"question": question, "cached": False})
     finally:
         await db.close()
 
