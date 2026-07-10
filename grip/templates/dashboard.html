@@ -12,13 +12,13 @@
 <div class="quick-actions">
     <a href="/checkin" class="quick-action">
         <div class="quick-action-icon">
-            <span class="material-symbols-outlined" style="color: var(--orange-container); font-size: 1.6rem;">{% if has_checkin %}task_alt{% else %}stylus_pencil{% endif %}</span>
+            <span class="material-symbols-outlined" style="color: var(--blue); font-size: 1.6rem;">{% if has_checkin %}task_alt{% else %}stylus_pencil{% endif %}</span>
         </div>
         <span class="quick-action-label">{% if has_checkin %}Check-in ✓{% else %}Check-in{% endif %}</span>
     </a>
     <a href="/weekreview" class="quick-action">
         <div class="quick-action-icon">
-            <span class="material-symbols-outlined" style="color: var(--orange-container); font-size: 1.6rem;">{% if has_week_review %}task_alt{% else %}content_paste{% endif %}</span>
+            <span class="material-symbols-outlined" style="color: var(--blue); font-size: 1.6rem;">{% if has_week_review %}task_alt{% else %}content_paste{% endif %}</span>
         </div>
         <span class="quick-action-label">{% if has_week_review %}Week {{ week }} ✓{% else %}Weekreview{% endif %}</span>
     </a>
@@ -34,8 +34,8 @@
 {% endif %}
 
 <div class="card" style="text-align: center;">
-    <div style="width: 2.75rem; height: 2.75rem; background: rgba(159,66,8,0.08); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;">
-        <span class="material-symbols-outlined" style="color: var(--orange);">track_changes</span>
+    <div style="width: 2.75rem; height: 2.75rem; background: #cfe0f7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;">
+        <span class="material-symbols-outlined" style="color: var(--blue);">track_changes</span>
     </div>
     <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem;">Huidige doelen</h3>
     {% if goals %}
@@ -51,8 +51,8 @@
 </div>
 
 <a href="/checkin/history" class="card" style="display: flex; align-items: center; gap: 1rem; text-decoration: none; color: inherit; padding: 1rem 1.25rem;">
-    <div style="background: var(--surface-low); padding: 0.6rem; border-radius: 10px; flex-shrink: 0;">
-        <span class="material-symbols-outlined" style="color: var(--orange-container);">calendar_month</span>
+    <div style="background: #cfe0f7; padding: 0.6rem; border-radius: 10px; flex-shrink: 0;">
+        <span class="material-symbols-outlined" style="color: var(--blue);">calendar_month</span>
     </div>
     <div style="flex: 1;">
         <div style="font-weight: 700;">Geschiedenis</div>

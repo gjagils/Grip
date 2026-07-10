@@ -647,7 +647,7 @@ textarea {
 .quick-action-icon {
     width: 3.25rem;
     height: 3.25rem;
-    background: var(--surface-2);
+    background: #cfe0f7;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -658,7 +658,7 @@ textarea {
 }
 
 .quick-action:hover .quick-action-icon {
-    background: rgba(193,95,34,0.10);
+    background: rgba(52,82,126,0.28);
 }
 
 .quick-action-label {
