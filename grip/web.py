@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from grip.database import get_db, init_db
-from grip.questions import get_daily_questions, get_weekly_questions
+from grip.questions import get_daily_questions, get_reflection_questions, get_weekly_questions
 from grip import insights
 
 BASE_DIR = Path(__file__).parent
@@ -138,14 +138,25 @@ async def checkin_page(request: Request):
         yesterday_checkin = await cursor.fetchone()
         yesterday_goal = yesterday_checkin["today_main_goal"] if yesterday_checkin else None
 
-        # Trackers — gisteren's waarden
+        # Gisteren in cijfers — alleen-lezen samenvatting van gevulde trackers
+        # (gevuld via health-sync of de Trackers-pagina; de check-in vraagt er niet meer om)
         cursor = await db.execute(
-            "SELECT t.id, t.name, t.unit, t.type, t.threshold_green, t.threshold_red, t.threshold_direction, te.value, te.note FROM trackers t "
-            "LEFT JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
+            "SELECT t.name, t.unit, t.type, t.threshold_green, t.threshold_red, t.threshold_direction, te.value "
+            "FROM trackers t JOIN tracker_entries te ON te.tracker_id = t.id AND te.date = ? "
             "WHERE t.active = 1 ORDER BY t.sort_order, t.id",
             (yesterday_str,),
         )
-        trackers = [dict(r) for r in await cursor.fetchall()]
+        yesterday_stats = [dict(r) for r in await cursor.fetchall()]
+
+        # Reflectievragen van vandaag + eventuele antwoorden (voor bijwerken)
+        reflections = await get_reflection_questions(db, today)
+        for q in reflections:
+            cursor = await db.execute(
+                "SELECT answer FROM reflection_answers WHERE date = ? AND question_id = ?",
+                (today_str, q["id"]),
+            )
+            row = await cursor.fetchone()
+            q["answer"] = row["answer"] if row else ""
 
         # Bestaand dagelijks inzicht
         cursor = await db.execute(
@@ -164,7 +175,8 @@ async def checkin_page(request: Request):
                 "today_tasks": today_tasks,
                 "yesterday_tasks": yesterday_tasks,
                 "yesterday_goal": yesterday_goal,
-                "trackers": trackers,
+                "yesterday_stats": yesterday_stats,
+                "reflections": reflections,
                 "today_insight": existing_insight["response"] if existing_insight else None,
             },
         )
@@ -190,27 +202,50 @@ async def save_checkin(request: Request):
             )
             checkin_id = cursor.lastrowid
 
-        # Sla gestructureerde velden op
+        # Doel van gisteren: chips gehaald/deels/niet → 1 / 0.5 / 0
+        goal_raw = form.get("yesterday_goal_done", "")
+        try:
+            goal_done = float(goal_raw) if goal_raw != "" else None
+        except ValueError:
+            goal_done = None
+
         await db.execute(
             """UPDATE check_ins SET
-                yesterday_highlight = ?, yesterday_different = ?,
                 yesterday_goal_done = ?, yesterday_goal_note = ?,
-                today_main_goal = ?, today_joy = ?,
+                today_main_goal = ?,
                 claude_question = ?, claude_question_answer = ?,
                 completed = 1
                WHERE id = ?""",
             (
-                form.get("yesterday_highlight"),
-                form.get("yesterday_different"),
-                1 if form.get("yesterday_goal_done") else 0,
+                goal_done,
                 form.get("yesterday_goal_note"),
                 form.get("today_main_goal"),
-                form.get("today_joy"),
                 form.get("claude_question"),
                 form.get("claude_question_answer"),
                 checkin_id,
             ),
         )
+
+        # Antwoorden op de reflectievragen van vandaag
+        for key, value in form.multi_items():
+            if not key.startswith("reflection_"):
+                continue
+            try:
+                qid = int(key.removeprefix("reflection_"))
+            except ValueError:
+                continue
+            cursor = await db.execute(
+                "SELECT text FROM reflection_questions WHERE id = ?", (qid,)
+            )
+            qrow = await cursor.fetchone()
+            if qrow is None:
+                continue
+            await db.execute(
+                """INSERT INTO reflection_answers (date, question_id, question_text, answer)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(date, question_id) DO UPDATE SET answer = excluded.answer""",
+                (today, qid, qrow["text"], value.strip()),
+            )
 
         # Gisteren's taken markeren als voltooid/niet voltooid
         yesterday = (date.today() - timedelta(days=1)).isoformat()
@@ -225,45 +260,18 @@ async def save_checkin(request: Request):
                 (1 if done else 0, t["id"]),
             )
 
-        # Gisteren's tracker waarden en notities opslaan
-        cursor = await db.execute("SELECT id, type FROM trackers WHERE active = 1")
-        active_trackers = await cursor.fetchall()
-        for t in active_trackers:
-            tid = t["id"]
-            note = form.get(f"tracker_note_{tid}", "").strip() or None
-            if t["type"] == "boolean":
-                raw = form.get(f"tracker_{tid}")
-                val = 1.0 if raw else 0.0
-                await db.execute(
-                    """INSERT INTO tracker_entries (tracker_id, date, value, note)
-                       VALUES (?, ?, ?, ?)
-                       ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value, note = excluded.note""",
-                    (tid, yesterday, val, note),
-                )
-            else:
-                raw = form.get(f"tracker_{tid}", "").strip()
-                if raw != "":
-                    try:
-                        val = float(raw)
-                    except ValueError:
-                        continue
-                    await db.execute(
-                        """INSERT INTO tracker_entries (tracker_id, date, value, note)
-                           VALUES (?, ?, ?, ?)
-                           ON CONFLICT(tracker_id, date) DO UPDATE SET value = excluded.value, note = excluded.note""",
-                        (tid, yesterday, val, note),
-                    )
-                elif note:
-                    await db.execute(
-                        "UPDATE tracker_entries SET note = ? WHERE tracker_id = ? AND date = ?",
-                        (note, tid, yesterday),
-                    )
-
-        # Vandaag's taken aanmaken (max 3)
-        for i in range(1, 4):
-            title = form.get(f"today_task_{i}", "").strip()
-            if title:
-                # Upsert: als er al een taak met deze positie is, update; anders insert
+        # Vandaag's taken: sync op titel (behoudt completed-status, voorkomt duplicaten)
+        cursor = await db.execute(
+            "SELECT id, title FROM daily_tasks WHERE date = ?", (today,)
+        )
+        existing_tasks = {r["title"]: r["id"] for r in await cursor.fetchall()}
+        new_titles = [t for t in
+                      (form.get(f"today_task_{i}", "").strip() for i in range(1, 4)) if t]
+        for title, tid in existing_tasks.items():
+            if title not in new_titles:
+                await db.execute("DELETE FROM daily_tasks WHERE id = ?", (tid,))
+        for title in new_titles:
+            if title not in existing_tasks:
                 await db.execute(
                     "INSERT INTO daily_tasks (title, date, check_in_id) VALUES (?, ?, ?)",
                     (title, today, checkin_id),
@@ -280,25 +288,47 @@ async def checkin_history(request: Request):
     db = await get_db()
     try:
         cursor = await db.execute(
-            """
-            SELECT ci.id, ci.date, ci.completed,
-                   q.text, q.type, ca.answer_text, ca.answer_score
-            FROM check_ins ci
-            LEFT JOIN check_in_answers ca ON ca.check_in_id = ci.id
-            LEFT JOIN questions q ON ca.question_id = q.id
-            ORDER BY ci.date DESC, q.is_core DESC
-            """
+            """SELECT date, today_main_goal, yesterday_goal_done, yesterday_goal_note,
+                      claude_question, claude_question_answer,
+                      yesterday_highlight, yesterday_different, today_joy
+               FROM check_ins ORDER BY date DESC LIMIT 60"""
         )
-        rows = await cursor.fetchall()
+        checkins = [dict(r) for r in await cursor.fetchall()]
 
-        # Groepeer per datum
-        history: dict[str, list[dict]] = {}
-        for r in rows:
-            d = r["date"]
-            if d not in history:
-                history[d] = []
-            if r["text"]:
-                history[d].append(dict(r))
+        cursor = await db.execute(
+            "SELECT date, question_text, answer FROM reflection_answers WHERE answer != '' ORDER BY date DESC"
+        )
+        reflections: dict[str, list[dict]] = {}
+        for r in await cursor.fetchall():
+            reflections.setdefault(r["date"], []).append(dict(r))
+
+        # yesterday_goal_done van dag X gaat over het doel van dag X-1 —
+        # koppel de status dus aan de kaart van de dag waarop het doel gesteld werd
+        by_date = {ci["date"]: ci for ci in checkins}
+
+        history = []
+        for ci in checkins:
+            entries = []
+            for q in reflections.get(ci["date"], []):
+                entries.append({"q": q["question_text"], "a": q["answer"]})
+            # Oude vaste velden (historische check-ins) blijven leesbaar
+            for field, label in [("yesterday_highlight", "Leukste van gisteren"),
+                                 ("yesterday_different", "Anders doen"),
+                                 ("today_joy", "Zin in")]:
+                if ci.get(field):
+                    entries.append({"q": label, "a": ci[field]})
+            if ci.get("claude_question") and ci.get("claude_question_answer"):
+                entries.append({"q": ci["claude_question"], "a": ci["claude_question_answer"], "claude": True})
+
+            next_day = (date.fromisoformat(ci["date"]) + timedelta(days=1)).isoformat()
+            next_ci = by_date.get(next_day)
+            history.append({
+                "date": ci["date"],
+                "goal": ci.get("today_main_goal"),
+                "goal_done": next_ci.get("yesterday_goal_done") if next_ci else None,
+                "goal_note": next_ci.get("yesterday_goal_note") if next_ci else None,
+                "entries": entries,
+            })
 
         return templates.TemplateResponse(request, "history.html", {"history": history})
     finally:
@@ -843,7 +873,10 @@ async def checkin_question(request: Request):
     """Genereert een persoonlijke vraag van Claude voor de check-in."""
     db = await get_db()
     try:
-        question = await insights.generate_checkin_question(db)
+        todays = await get_reflection_questions(db)
+        question = await insights.generate_checkin_question(
+            db, avoid=[q["text"] for q in todays]
+        )
         return JSONResponse({"question": question})
     finally:
         await db.close()

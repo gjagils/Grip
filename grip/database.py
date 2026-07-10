@@ -38,6 +38,23 @@ CREATE TABLE IF NOT EXISTS check_in_answers (
     answer_score INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS reflection_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('back', 'forward')),
+    active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS reflection_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    question_id INTEGER NOT NULL REFERENCES reflection_questions(id),
+    question_text TEXT NOT NULL,
+    answer TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(date, question_id)
+);
+
 CREATE TABLE IF NOT EXISTS week_reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     year INTEGER NOT NULL,
@@ -181,6 +198,7 @@ async def init_db():
         await db.executescript(SCHEMA)
         await _migrate_db(db)
         await _seed_questions(db)
+        await _seed_reflection_questions(db)
         await db.commit()
     finally:
         await db.close()
@@ -279,4 +297,44 @@ async def _seed_questions(db: aiosqlite.Connection):
     await db.executemany(
         "INSERT INTO questions (text, type, category, is_core) VALUES (?, ?, ?, ?)",
         questions,
+    )
+
+
+async def _seed_reflection_questions(db: aiosqlite.Connection):
+    """Vraagpools voor de dagelijkse check-in — geïnspireerd op 5 Minute Journal,
+    Daily Stoic e.d. Roteren per dag; beheer kan via de database (active-vlag)."""
+    cursor = await db.execute("SELECT COUNT(*) FROM reflection_questions")
+    if (await cursor.fetchone())[0] > 0:
+        return
+
+    pool = [
+        # Terugblik
+        ("Waar ben je dankbaar voor als je aan gisteren terugdenkt?", "back"),
+        ("Wat gaf je gisteren energie — en wat vrat energie?", "back"),
+        ("Wat heb je gisteren geleerd, hoe klein ook?", "back"),
+        ("Welk moment van gisteren verdient een compliment aan jezelf?", "back"),
+        ("Wie maakte gisteren het verschil voor je — en weet diegene dat?", "back"),
+        ("Wat stelde je gisteren uit, en wat zat daarachter?", "back"),
+        ("Wat was gisteren het mooiste moment?", "back"),
+        ("Wat deed je gisteren puur voor jezelf?", "back"),
+        ("Welke keuze van gisteren zou je terugdraaien als het kon?", "back"),
+        ("Waar was je gisteren beter in dan je zelf doorhad?", "back"),
+        ("Wat hield je gisteren bezig dat je vandaag wilt loslaten?", "back"),
+        ("Waar heb je gisteren te lang aan vastgehouden?", "back"),
+        # Vooruitblik
+        ("Wat zou vandaag geweldig maken?", "forward"),
+        ("Welk obstakel zie je vandaag aankomen — en hoe reageer je dan?", "forward"),
+        ("Waar kijk je vandaag naar uit?", "forward"),
+        ("Waar zeg je vandaag bewust 'nee' tegen?", "forward"),
+        ("Hoe wil je vanavond op vandaag terugkijken?", "forward"),
+        ("Welke kleine stap richting je kwartaaldoel past in vandaag?", "forward"),
+        ("Voor wie kun je vandaag iets betekenen?", "forward"),
+        ("Wat is vandaag het moedigste dat je kunt doen?", "forward"),
+        ("Welke gewoonte verdient vandaag extra aandacht?", "forward"),
+        ("Waar wil je vandaag je energie bewust níet aan geven?", "forward"),
+        ("Wat kun je vandaag doen waar je toekomstige zelf blij mee is?", "forward"),
+        ("Wat maakt vandaag anders dan gisteren?", "forward"),
+    ]
+    await db.executemany(
+        "INSERT INTO reflection_questions (text, kind) VALUES (?, ?)", pool
     )

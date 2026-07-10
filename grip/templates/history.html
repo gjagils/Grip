@@ -4,21 +4,33 @@
 {% block title %}Geschiedenis — Grip{% endblock %}
 
 {% block content %}
-<h1>Check-in geschiedenis</h1>
+<div class="page-header">
+    <span class="page-header-kicker">Journal</span>
+    <h2 class="page-header-title">Geschiedenis</h2>
+    <p class="page-header-sub">Je eerdere check-ins.</p>
+</div>
 
 {% if history %}
-{% for date, answers in history.items() %}
-<div class="history-date">{{ date }}</div>
-{% for a in answers %}
-<div class="history-entry">
-    <strong>{{ a.text }}:</strong>
-    {% if a.type == 'score' %}
-        {{ a.answer_score }}/10
-    {% else %}
-        {{ a.answer_text }}
+{% for day in history %}
+<div class="card history-card">
+    <div class="history-card-top">
+        <span class="history-date">{{ day.date }}</span>
+        {% if day.goal_done is not none %}
+        <span class="tracker-tile-badge {{ 'good' if day.goal_done == 1 else ('warn' if day.goal_done == 0.5 else 'bad') }}">
+            doel {{ 'gehaald' if day.goal_done == 1 else ('deels' if day.goal_done == 0.5 else 'niet gehaald') }}
+        </span>
+        {% endif %}
+    </div>
+    {% if day.goal %}
+    <div class="history-goal">🎯 {{ day.goal }}</div>
     {% endif %}
+    {% for e in day.entries %}
+    <div class="history-entry">
+        <div class="history-q">{% if e.claude %}<span class="reflect-kicker claude">Claude</span> {% endif %}{{ e.q }}</div>
+        <div class="history-a">{{ e.a }}</div>
+    </div>
+    {% endfor %}
 </div>
-{% endfor %}
 {% endfor %}
 {% else %}
 <div class="empty-state">

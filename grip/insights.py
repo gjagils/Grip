@@ -61,6 +61,45 @@ async def _build_context(db: aiosqlite.Connection, days: int = 30) -> str:
             answer = r["answer_score"] if r["type"] == "score" else r["answer_text"]
             parts.append(f"- {r['text']}: {answer}")
 
+    # Check-in kernvelden: doelen, of ze gehaald zijn, en Claude's vraag + antwoord
+    cursor = await db.execute(
+        """SELECT date, today_main_goal, yesterday_goal_done, yesterday_goal_note,
+                  claude_question, claude_question_answer
+           FROM check_ins WHERE date >= ? ORDER BY date DESC""",
+        (since,),
+    )
+    ci_rows = await cursor.fetchall()
+    if ci_rows:
+        parts.append("\n## Dagelijkse doelen en antwoorden")
+        done_label = {1: "gehaald", 0.5: "deels gehaald", 0: "niet gehaald"}
+        for r in ci_rows:
+            parts.append(f"\n### {r['date']}")
+            if r["today_main_goal"]:
+                parts.append(f"- Doel van de dag: {r['today_main_goal']}")
+            if r["yesterday_goal_done"] is not None:
+                label = done_label.get(r["yesterday_goal_done"], r["yesterday_goal_done"])
+                note = f" — {r['yesterday_goal_note']}" if r["yesterday_goal_note"] else ""
+                parts.append(f"- Doel van de dag ervoor: {label}{note}")
+            if r["claude_question"] and r["claude_question_answer"]:
+                parts.append(f"- Vraag van coach: {r['claude_question']}")
+                parts.append(f"  Antwoord: {r['claude_question_answer']}")
+
+    # Reflectie-antwoorden (wisselende dagvragen)
+    cursor = await db.execute(
+        """SELECT date, question_text, answer FROM reflection_answers
+           WHERE date >= ? AND answer != '' ORDER BY date DESC""",
+        (since,),
+    )
+    refl_rows = await cursor.fetchall()
+    if refl_rows:
+        parts.append("\n## Reflectie-antwoorden")
+        current_date = None
+        for r in refl_rows:
+            if r["date"] != current_date:
+                current_date = r["date"]
+                parts.append(f"\n### {current_date}")
+            parts.append(f"- {r['question_text']}: {r['answer']}")
+
     # Recente weekreviews
     cursor = await db.execute(
         """
@@ -161,24 +200,35 @@ async def reflect_checkin(db: aiosqlite.Connection) -> str:
     now = datetime.now()
     year, week, _ = now.isocalendar()
 
+    parts = [f"## Check-in {today}"]
+
+    cursor = await db.execute("SELECT * FROM check_ins WHERE date = ?", (today,))
+    ci = await cursor.fetchone()
+    if ci:
+        done_label = {1: "gehaald", 0.5: "deels gehaald", 0: "niet gehaald"}
+        if ci["today_main_goal"]:
+            parts.append(f"- Belangrijkste doel vandaag: {ci['today_main_goal']}")
+        if ci["yesterday_goal_done"] is not None:
+            note = f" — {ci['yesterday_goal_note']}" if ci["yesterday_goal_note"] else ""
+            parts.append(f"- Doel van gisteren: {done_label.get(ci['yesterday_goal_done'], '?')}{note}")
+        if ci["claude_question"] and ci["claude_question_answer"]:
+            parts.append(f"- Coach vroeg: {ci['claude_question']}")
+            parts.append(f"  Antwoord: {ci['claude_question_answer']}")
+
     cursor = await db.execute(
-        """
-        SELECT q.text, q.type, ca.answer_text, ca.answer_score
-        FROM check_in_answers ca
-        JOIN check_ins ci ON ca.check_in_id = ci.id
-        JOIN questions q ON ca.question_id = q.id
-        WHERE ci.date = ?
-        ORDER BY q.is_core DESC
-        """,
+        "SELECT question_text, answer FROM reflection_answers WHERE date = ? AND answer != ''",
         (today,),
     )
-    rows = await cursor.fetchall()
+    for r in await cursor.fetchall():
+        parts.append(f"- {r['question_text']}: {r['answer']}")
 
-    parts = [f"## Check-in {today}"]
-    for r in rows:
-        answer = r["answer_score"] if r["type"] == "score" else r["answer_text"]
-        if answer is not None:
-            parts.append(f"- {r['text']}: {answer}")
+    cursor = await db.execute(
+        "SELECT title, completed FROM daily_tasks WHERE date = ?", (today,)
+    )
+    tasks = await cursor.fetchall()
+    if tasks:
+        parts.append("- Taken vandaag: " + "; ".join(
+            f"{t['title']} [{'x' if t['completed'] else ' '}]" for t in tasks))
 
     cursor = await db.execute(
         "SELECT title FROM goals WHERE type = 'weekly' AND status = 'active' AND year = ? AND week_number = ?",
@@ -287,9 +337,25 @@ async def load_chat_history(db: aiosqlite.Connection, limit: int = 40) -> list[d
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
-async def generate_checkin_question(db: aiosqlite.Connection) -> str:
-    """Haiku genereert één persoonlijke vraag op basis van recente check-ins."""
+# Invalshoek van de dagvraag roteert — verrassing als feature
+_QUESTION_TONES = [
+    "confronterend: benoem een concreet patroon, een uitgesteld doel of een tegenstrijdigheid tussen wat de gebruiker zei en deed, en prik daar doorheen",
+    "motiverend: geef energie voor vandaag door aan te sluiten op iets waar de gebruiker naar uitkijkt of aan werkt",
+    "vierend: bouw voort op iets dat recent goed ging en vraag hoe dat vaker kan",
+    "verdiepend: pak één ding dat de gebruiker recent schreef en vraag daarop door",
+]
+
+
+async def generate_checkin_question(db: aiosqlite.Connection, avoid: list[str] | None = None) -> str:
+    """Haiku genereert één persoonlijke accountability-vraag. De invalshoek
+    wisselt per dag; `avoid` bevat de rotatievragen van vandaag zodat de
+    AI-vraag daar niet mee overlapt."""
     context = await _build_context(db, days=7)
+    tone = _QUESTION_TONES[date.today().toordinal() % len(_QUESTION_TONES)]
+    avoid_text = ""
+    if avoid:
+        avoid_text = "\nDeze vragen krijgt de gebruiker vandaag al — kies een ander onderwerp:\n" + \
+                     "\n".join(f"- {q}" for q in avoid)
 
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
@@ -298,7 +364,13 @@ async def generate_checkin_question(db: aiosqlite.Connection) -> str:
         messages=[
             {
                 "role": "user",
-                "content": f"{context}\n\n---\nGenereer één korte, persoonlijke vraag voor de dagelijkse check-in. Baseer hem op een recent patroon, uitspraak of doel. Alleen de vraag, geen inleiding.",
+                "content": (
+                    f"{context}\n\n---\n"
+                    f"Je bent de accountabilitypartner. Genereer één vraag voor de dagelijkse check-in.\n"
+                    f"Invalshoek van vandaag — {tone}.\n"
+                    f"Eisen: verwijs naar iets concreets uit de data (een uitspraak, doel of patroon), "
+                    f"nooit vaag of algemeen, maximaal 25 woorden, alleen de vraag zelf zonder inleiding.{avoid_text}"
+                ),
             }
         ],
     )
