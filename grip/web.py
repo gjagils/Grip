@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -13,9 +14,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from grip.database import get_db, init_db
+from grip.database import get_app_state, get_db, init_db, set_app_state
 from grip.questions import get_daily_questions, get_reflection_questions, get_weekly_questions
-from grip import insights
+from grip import insights, notify
 
 BASE_DIR = Path(__file__).parent
 
@@ -23,7 +24,11 @@ BASE_DIR = Path(__file__).parent
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    yield
+    watchdog = asyncio.create_task(notify.sync_watchdog_loop())
+    try:
+        yield
+    finally:
+        watchdog.cancel()
 
 
 app = FastAPI(title="Grip", lifespan=lifespan)
@@ -1425,6 +1430,7 @@ async def health_sync(request: Request):
                 synced, skipped = await _upsert_health_entry(db, entry_date, entry)
                 results.append({"date": entry_date, "synced": synced, "skipped": skipped})
 
+            await set_app_state(db, notify.LAST_SYNC_KEY, notify._now().isoformat(timespec="seconds"))
             await db.commit()
             result = {"ok": True, "mode": "multi", "results": results, "days": len(results)}
             logger.info("health/sync — resultaat: %s", json.dumps(result))
@@ -1434,6 +1440,7 @@ async def health_sync(request: Request):
         sync_date = data.get("date", yesterday)
         synced, skipped = await _upsert_health_entry(db, sync_date, data)
 
+        await set_app_state(db, notify.LAST_SYNC_KEY, notify._now().isoformat(timespec="seconds"))
         await db.commit()
         result = {"ok": True, "mode": "single", "synced": synced, "skipped": skipped, "date": sync_date}
         logger.info("health/sync — resultaat: %s", json.dumps(result))
@@ -1576,6 +1583,25 @@ async def health_import_hae(request: Request):
         await db.close()
 
 
+@app.post("/api/notify/test")
+async def notify_test(request: Request):
+    """Stuurt een test-push — handig om de ntfy-config te verifiëren."""
+    if (auth_error := _sync_auth_error(request)) is not None:
+        return auth_error
+    ok = await notify.send_push_async(
+        title="Grip test",
+        message="Testmelding vanuit Grip — als je dit ziet werkt ntfy. ✅",
+        priority="default",
+        tags="white_check_mark",
+    )
+    if ok:
+        return JSONResponse({"ok": True})
+    return JSONResponse(
+        {"ok": False, "error": "Push niet verstuurd — controleer NTFY_URL in de env."},
+        status_code=503,
+    )
+
+
 @app.get("/api/health/status")
 async def health_status(request: Request):
     """Geeft de meest recente health-sync terug — handig voor testen vanuit Shortcuts."""
@@ -1678,20 +1704,47 @@ async def health_page(request: Request):
                 "threshold_direction": t["threshold_direction"],
             })
 
-        # Sync-status: dekking van de laatste 14 dagen + hoe oud de laatste sync is
+        # Sync-status: dekking van de laatste 14 dagen + hoe lang geleden de
+        # laatste sync écht binnenkwam (ontvangsttijd, niet de datadatum — die
+        # loopt altijd een dag achter en zegt dus niets over of de Shortcut liep)
         coverage = [{"date": d, "has": d in days_with_data} for d in day_list[-14:]]
-        if overall_last is None:
+        received_raw = await get_app_state(db, notify.LAST_SYNC_KEY)
+        received_dt = None
+        if received_raw:
+            try:
+                received_dt = datetime.fromisoformat(received_raw)
+            except ValueError:
+                received_dt = None
+
+        if received_dt is not None:
+            now = notify._now()
+            if received_dt.tzinfo is None:
+                received_dt = received_dt.replace(tzinfo=notify.TZ)
+            mins = (now - received_dt).total_seconds() / 60
+            if mins < 2:
+                ago = "zojuist"
+            elif mins < 90:
+                ago = f"{int(round(mins))} min geleden"
+            elif mins < 36 * 60:
+                ago = f"{int(round(mins / 60))} uur geleden"
+            else:
+                ago = f"{int(mins // (24 * 60))} dagen geleden"
+            recv_date = received_dt.astimezone(notify.TZ).date()
+            gap_days = (now.date() - recv_date).days
+            if gap_days == 0:
+                sync_state = "ok"
+            elif gap_days == 1:
+                sync_state = "warn"
+            else:
+                sync_state = "bad"
+            sync_label = f"laatste sync: {ago}"
+        elif overall_last is None:
             sync_state, sync_label = "none", "nog geen data ontvangen"
         else:
+            # Fallback voor databases van vóór de ontvangsttijd-tracking
             gap = (today - date.fromisoformat(overall_last)).days
-            if gap == 0:
-                sync_state, sync_label = "ok", "laatste sync: vandaag"
-            elif gap == 1:
-                sync_state, sync_label = "ok", "laatste sync: gisteren"
-            elif gap <= 3:
-                sync_state, sync_label = "warn", f"laatste sync: {gap} dagen geleden"
-            else:
-                sync_state, sync_label = "bad", f"laatste sync: {gap} dagen geleden"
+            sync_state = "ok" if gap <= 1 else ("warn" if gap <= 3 else "bad")
+            sync_label = f"laatste data: {overall_last}"
 
         # Metrics die wel bestaan maar al even niets ontvingen (sync-aandachtspunten)
         stale = [{"name": m["name"], "days_ago": m["days_ago"]}

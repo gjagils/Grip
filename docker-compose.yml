@@ -8,6 +8,9 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - HEALTH_SYNC_TOKEN=${HEALTH_SYNC_TOKEN}
+      - NTFY_URL=${NTFY_URL}
+      - NTFY_TOKEN=${NTFY_TOKEN}
+      - WATCHDOG_HOUR=${WATCHDOG_HOUR}
     volumes:
       - grip-data:/data
 

@@ -188,6 +188,11 @@ CREATE TABLE IF NOT EXISTS quarterly_reviews (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(year, quarter)
 );
+
+CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 
@@ -346,4 +351,21 @@ async def _seed_reflection_questions(db: aiosqlite.Connection):
     ]
     await db.executemany(
         "INSERT INTO reflection_questions (text, kind) VALUES (?, ?)", pool
+    )
+
+
+async def get_app_state(db: aiosqlite.Connection, key: str) -> str | None:
+    """Leest een waarde uit de app_state key/value-tabel."""
+    cursor = await db.execute("SELECT value FROM app_state WHERE key = ?", (key,))
+    row = await cursor.fetchone()
+    return row["value"] if row else None
+
+
+async def set_app_state(db: aiosqlite.Connection, key: str, value: str) -> None:
+    """Schrijft (of overschrijft) een waarde in de app_state key/value-tabel.
+    Commit gebeurt door de aanroeper."""
+    await db.execute(
+        "INSERT INTO app_state (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
     )
