@@ -17,6 +17,7 @@ Vastgesteld in de vragenronde:
 | Werkdata | Handmatig in v1, Microsoft 365 als step-up | Zie §8 — afspraakvrije uren kunnen wél meteen automatisch |
 | Hosting | Synology + Tailscale | Gezondheidsdata verlaat het huis niet; VPN-afhankelijkheid moet expliciet opgevangen |
 | Interfaces | iOS-app **en** web | Backend wordt een echte JSON-API met twee clients |
+| Wearable | Fitnessband zonder abonnement, **geen Apple Watch** | Welke metrics beschikbaar zijn hangt af van de HealthKit-bridge van de fabrikant — zie §3 |
 
 **Waarom het chassis blijft.** "Grip vervangen" gaat over het product, niet over de deploy-pipeline. De GitHub Actions-workflow, het ghcr.io-image, de Tailscale-hop naar Portainer en de stack op de Synology werken al. Die opnieuw opbouwen kost dagen en levert niets op. Wat wél weggaat: de Jinja-PWA, het trackers-als-health-opslag-hack, en de huidige check-in-flow.
 
@@ -86,6 +87,22 @@ Je intuïtie klopt, en het verschil is groter dan je denkt. Nu loopt Health-data
 | Verversing | 1× per dag | continu, binnen minuten na de meting |
 
 **Workouts specifiek.** `HKWorkout` levert het type (`HKWorkoutActivityType` — hardlopen, kracht, fietsen, …), start/eind, energie en afstand. Daarnaast kun je per workout de hartslagsamples ophalen en daaruit zones en een belastingsscore berekenen. Dat is het verschil tussen "je hebt 45 minuten bewogen" en "je deed een zware duurloop terwijl je HRV al twee dagen onder je baseline zat".
+
+### De band bepaalt wat er binnenkomt
+
+Zonder Apple Watch is de app afhankelijk van wat de fabrikant van de band naar HealthKit schrijft — en dat is bijna altijd minder dan de doos belooft. "Werkt met Apple Health" zegt niets; wat telt is *welke HealthKit-types* er landen.
+
+Voor dit ontwerp zijn er drie die ertoe doen, in deze volgorde:
+
+| HealthKit-type | Waarvoor | Zonder dit |
+|---|---|---|
+| `sleepAnalysis` **met fases** | slaapkwaliteit en slaapregelmaat | alleen slaapduur — de zwakste van alle slaapmaten |
+| `heartRateVariabilitySDNN` | belangrijkste hersteldriver in de Lichaam-score | de score leunt volledig op slaap en rust-HR |
+| `restingHeartRate` | tweede hersteldriver, trage trend | geen tegenwicht tegen een ruisige HRV |
+
+Steps, calorieën en beweegminuten zijn nadrukkelijk de *minst* waardevolle metrics in dit hele plan. Een band die stappen perfect telt maar slaap als één ongedifferentieerd blok doorgeeft, is voor deze app een slechte band.
+
+**Acceptatietest bij aanschaf, één nacht:** draag hem, en kijk de volgende ochtend in Apple Gezondheid onder *Slaap* of je een fase-verdeling ziet (diep / REM / kern / wakker) en onder *Hart → HRV* of er een nachtwaarde staat. Staan die er niet, dan is de band ongeschikt — hoe goed zijn eigen app ook is.
 
 **De valkuil: Tailscale.** De app kan de NAS alleen bereiken als het tailnet up is. Achtergrondsync terwijl de VPN uit staat mislukt — en dat mag niet stil gebeuren. Oplossing:
 
@@ -303,7 +320,7 @@ Fase 1 en 2 zijn samen al een bruikbaar product: je krijgt data die je nu niet h
 
 ## 14. Open vragen
 
-1. **Apple Watch?** Zonder Watch geen HRV, geen slaapfases, geen betrouwbare rust-hartslag — dan valt ongeveer de helft van §3 weg en verschuift het zwaartepunt naar workouts en werkdata.
+1. **Welke band wordt het?** Vastgesteld: geen Apple Watch, maar een fitnessband zonder abonnement. Openstaand: welke — de keuze bepaalt of slaapfases en HRV daadwerkelijk in HealthKit landen (§3). Garmin is de enige grote abonnementsloze fabrikant met officiële slaapfase-sync naar Apple Health; Amazfit is goedkoper maar levert slaap als één blok aan.
 2. **Welke metrics zeggen jóu iets?** Ik kan alles binnenhalen, maar het dashboard moet klein blijven. Noem de vijf die je écht wilt zien.
 3. Wat bedoelde je met **"een versie die op mijn telefoon draait"** bij de werkdata?
 4. **Werktijden en agenda's:** welke uren tellen als werkdag, welke agenda's meenemen, tellen hele-dag-afspraken mee, en vanaf hoeveel minuten is iets een focusblok?
