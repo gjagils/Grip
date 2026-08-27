@@ -17,7 +17,7 @@ Vastgesteld in de vragenronde:
 | Werkdata | Handmatig in v1, Microsoft 365 als step-up | Zie §8 — afspraakvrije uren kunnen wél meteen automatisch |
 | Hosting | Synology + Tailscale | Gezondheidsdata verlaat het huis niet; VPN-afhankelijkheid moet expliciet opgevangen |
 | Interfaces | iOS-app **en** web | Backend wordt een echte JSON-API met twee clients |
-| Wearable | **Apple Watch Ultra 2**, al aanwezig | HealthKit is daarmee het complete datapad — geen fabrikant-API, geen onofficiële scraper, geen abonnement. Zie §3 |
+| Wearable | **Apple Watch Ultra 2** overdag, matrasmat 's nachts | Horloge niet in bed. HRV komt uit een gestandaardiseerde ochtendmeting, slaap uit de mat — beide native in HealthKit. Zie §3 |
 
 **Waarom het chassis blijft.** "Grip vervangen" gaat over het product, niet over de deploy-pipeline. De GitHub Actions-workflow, het ghcr.io-image, de Tailscale-hop naar Portainer en de stack op de Synology werken al. Die opnieuw opbouwen kost dagen en levert niets op. Wat wél weggaat: de Jinja-PWA, het trackers-als-health-opslag-hack, en de huidige check-in-flow.
 
@@ -106,19 +106,48 @@ Uitgezocht per fabrikant: geen enkele derde partij doet dat. Garmin niet (jarenl
 
 Wat het horloge 's nachts bovendien meelevert: slaapfases (REM, kern, diep, wakker), rust-hartslag, ademfrequentie, polstemperatuur en zuurstofsaturatie — plus de Vitals-app, die daar zelf een persoonlijke bandbreedte omheen berekent en afwijkingen markeert. Dat is in de kern gratis wat Oura "readiness" noemt. En **State of Mind** voedt de Hoofd-score met een gestandaardiseerde stemmingsregistratie die anders handmatig zou moeten.
 
-### Alleen als het horloge 's nachts niet blijft zitten
+### Het horloge gaat 's nachts niet om — en voor HRV is dat beter
 
-De enige echte drempel is praktisch: een 49mm titanium horloge in bed, en ongeveer een uur per dag opladen (de Ultra 2 haalt ~36 uur, dus 24/7 dragen kán; iOS waarschuwt zelf onder 30% voor het slapengaan).
+Vastgesteld: een horloge dragen in bed is geen optie. Dat klinkt als een probleem voor de belangrijkste hersteldriver, maar bij nader onderzoek is het tegenovergestelde waar.
 
-**Eerst twee weken proberen, kosten nul.** Blijft het niet zitten, dan is de vervanger de *matrasmat* — niet nóg een wearable:
+**Apple's automatische HRV-metingen deugen niet.** Marco Altini (HRV4Training, gepromoveerd op HRV) laat zien dat dezelfde geëxporteerde dataset twee keer achter elkaar 50 ms en 100 ms opleverde — de achtergrondmetingen worden niet gevalideerd. Daar komt bij dat losse nachtmetingen fysiologisch weinig zeggen: HRV stijgt gedurende de nacht mee met het circadiane ritme en fluctueert per slaapfase, dus een willekeurig nachtsample meet vooral *in welke slaapfase je toevallig zat*.
 
-- **Withings Sleep Analyzer**, onder het matras. Niets dragen, niets opladen, geen abonnement. Slaapfases, hartslag, ademhalingsstoringen en snurken, via Health Mate naar Apple Health.
-- Nadeel: **geen HRV.** Die komt dan alleen nog uit de daglezingen van het horloge — minder waardevol, want de nachtwaarde is de bruikbare.
+Wat het horloge wél goed doet, is een **handmatig getriggerde meting via de Mindfulness-app**. En omdat die telkens in exact dezelfde omstandigheden plaatsvindt, is hij beter vergelijkbaar dan welk nachtgemiddelde ook.
 
-Een band of ring náást de Ultra 2 is de slechtste van de drie: je betaalt voor een tweede sensor die HRV alsnog niet native levert, en je krijgt er een probleem bij (hieronder).
+**Het protocol dat we implementeren:**
 
-**Bronprioriteit is verplicht.** Zodra twee apparaten `sleepAnalysis` naar HealthKit schrijven, staan er dubbele en tegenstrijdige nachten in. De app moet dus per meettype één primaire bron kiezen en de rest negeren — instelbaar, met het horloge als standaard. Dat is geen detail: zonder die regel telt de app nachten dubbel en klopt elke baseline in §5 niet meer.
+1. Wakker worden, naar de wc.
+2. **Rechtop zitten** — dat legt een orthostatische prikkel op en maakt parasympathische activiteit zichtbaar.
+3. Horloge om, Mindfulness-app, 1–2 minuten.
+4. **Normaal ademhalen, niet meeademen met de animatie** — diep ademen blaast de waarde kunstmatig op. Zet daarom de haptische pulsjes uit: Watch-app → Mindfulness → Haptics → Geen.
+5. Vóór je je telefoon pakt. Mail en berichten zijn stressoren en die meet je mee.
 
+### Implementatieregel: HRV-samples zijn niet onderling vergelijkbaar
+
+Hieruit volgt een harde regel voor §5, en het is precies het soort bug dat je pas na maanden ontdekt.
+
+In HealthKit landen `heartRateVariabilitySDNN`-samples uit drie verschillende contexten: automatische achtergrondmetingen, slaapmetingen en Mindfulness-sessies. **Die zijn niet uitwisselbaar** — een mindfulness-meting ligt structureel hoger dan een slaapgemiddelde. Ze bij elkaar in één baseline gooien levert een trend op die vooral je meetgedrag volgt in plaats van je fysiologie.
+
+De baseline-berekening moet daarom filteren, niet middelen:
+
+- Neem alleen HRV-samples die binnen een `mindfulSession`-venster van diezelfde ochtend vallen.
+- Eén meting per dag, vóór 12:00; latere metingen negeren.
+- Wissel nooit van methode. Wie toch overstapt, start een nieuwe baseline — minimaal 60 dagen voordat de trend weer betekenis heeft.
+
+### Slaap zelf: de matrasmat
+
+Voor de slaapdata zelf komt er dan een apparaat dat je niet draagt: de **Withings Sleep Analyzer** onder het matras, ~€130–170 eenmalig, geen abonnement. Slaapfases, hartslag, ademhalingsstoringen en snurken, via Health Mate naar Apple Health. Niets omdoen, niets opladen.
+
+Wat je hiermee opgeeft ten opzichte van 's nachts het horloge dragen:
+
+| Verlies | Ernst |
+|---|---|
+| Polstemperatuur | matig — aardig vroeg ziektesignaal, maar geen kernmetric |
+| Zuurstofsaturatie 's nachts | klein |
+| Vitals-app met eigen bandbreedtes | **geen** — §5 rekent zijn eigen baselines uit, dus dit was toch al dubbelop |
+| Nachtelijk HRV-gemiddelde | **geen** — het ochtendprotocol hierboven is aantoonbaar beter |
+
+Netto: je levert polstemperatuur in en krijgt er betere HRV en een comfortabele nacht voor terug. Dat is een goede ruil.
 
 **De valkuil: Tailscale.** De app kan de NAS alleen bereiken als het tailnet up is. Achtergrondsync terwijl de VPN uit staat mislukt — en dat mag niet stil gebeuren. Oplossing:
 
@@ -336,7 +365,7 @@ Fase 1 en 2 zijn samen al een bruikbaar product: je krijgt data die je nu niet h
 
 ## 14. Open vragen
 
-1. **Blijft het horloge 's nachts zitten?** Twee weken proberen, kosten nul. Zo ja: geen aankoop nodig en HealthKit levert alles. Zo nee: de Withings-matrasmat, met het verlies van nachtelijke HRV als prijs (§3).
+1. **Ochtendritueel:** het HRV-protocol uit §3 staat of valt bij consistentie — elke ochtend, zelfde volgorde, vóór de telefoon. Wil je dat de app je eraan herinnert met een push, of vertrouw je op gewoonte?
 2. **Welke metrics zeggen jóu iets?** Ik kan alles binnenhalen, maar het dashboard moet klein blijven. Noem de vijf die je écht wilt zien.
 3. Wat bedoelde je met **"een versie die op mijn telefoon draait"** bij de werkdata?
 4. **Werktijden en agenda's:** welke uren tellen als werkdag, welke agenda's meenemen, tellen hele-dag-afspraken mee, en vanaf hoeveel minuten is iets een focusblok?
