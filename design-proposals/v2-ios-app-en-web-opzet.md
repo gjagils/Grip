@@ -17,7 +17,7 @@ Vastgesteld in de vragenronde:
 | Werkdata | Handmatig in v1, Microsoft 365 als step-up | Zie §8 — afspraakvrije uren kunnen wél meteen automatisch |
 | Hosting | Synology + Tailscale | Gezondheidsdata verlaat het huis niet; VPN-afhankelijkheid moet expliciet opgevangen |
 | Interfaces | iOS-app **en** web | Backend wordt een echte JSON-API met twee clients |
-| Wearable | **Apple Watch Ultra 2** overdag, matrasmat 's nachts | Horloge niet in bed. HRV komt uit een gestandaardiseerde ochtendmeting, slaap uit de mat — beide native in HealthKit. Zie §3 |
+| Wearable | **Apple Watch Ultra 2** overdag, **Oura Ring 4** 's nachts | Horloge niet in bed. Slaap en HRV komen via de officiële Oura-API rechtstreeks bij de Synology, buiten de telefoon om. Zie §3 |
 
 **Waarom het chassis blijft.** "Grip vervangen" gaat over het product, niet over de deploy-pipeline. De GitHub Actions-workflow, het ghcr.io-image, de Tailscale-hop naar Portainer en de stack op de Synology werken al. Die opnieuw opbouwen kost dagen en levert niets op. Wat wél weggaat: de Jinja-PWA, het trackers-als-health-opslag-hack, en de huidige check-in-flow.
 
@@ -88,77 +88,47 @@ Je intuïtie klopt, en het verschil is groter dan je denkt. Nu loopt Health-data
 
 **Workouts specifiek.** `HKWorkout` levert het type (`HKWorkoutActivityType` — hardlopen, kracht, fietsen, …), start/eind, energie en afstand. Daarnaast kun je per workout de hartslagsamples ophalen en daaruit zones en een belastingsscore berekenen. Dat is het verschil tussen "je hebt 45 minuten bewogen" en "je deed een zware duurloop terwijl je HRV al twee dagen onder je baseline zat".
 
-### De Apple Watch Ultra 2 lost het grootste probleem al op
+### Twee apparaten, één taakverdeling
 
-Er is al een Apple Watch Ultra 2 in huis, voor overdag. Dat verandert de architectuur ingrijpend, want het horloge is **het enige apparaat dat HRV zelf naar HealthKit schrijft** — `heartRateVariabilitySDNN`, native, zonder brug.
+Overdag zit de Apple Watch Ultra 2 om: workouts met hartslagzones, State of Mind voor de Hoofd-score, stappen en energie — alles native in HealthKit. 's Nachts gaat hij af, want een horloge in bed is geen optie.
 
-Uitgezocht per fabrikant: geen enkele derde partij doet dat. Garmin niet (jarenlange, gedocumenteerde beperking), Oura niet, Whoop niet (die meet rMSSD waar Apple SDNN opslaat). Wie een band koopt, koopt dus een omweg voor de belangrijkste hersteldriver in dit ontwerp.
+Voor de nacht komt er een **Oura Ring 4**. Die keuze verving een eerder voorstel (matrasmat plus een handmatige ochtendmeting) toen twee dingen duidelijk werden.
 
-| Apparaat | Slaapfases | Nachtelijke HRV | Kosten |
-|---|---|---|---|
-| **Apple Watch Ultra 2** (aanwezig) | ja, native | **ja, native SDNN** | **€0** |
-| Withings Sleep Analyzer (matras) | ja, via Health Mate | nee | ~€130–170 eenmalig |
-| Garmin CIRQA | ja | alleen via onofficiële bibliotheek | €199 eenmalig |
-| Oura Ring 4 | ja | alleen via API, abonnement vereist | ~$349 + $70/jr |
-| Whoop 5.0 | sessie, geen fases | alleen via API | $199/jr |
+**1. De Apple Watch levert de verkeerde HRV-maat.** Apple rapporteert **SDNN**; Oura, Whoop en de rest rapporteren **rMSSD**. Dat zijn geen varianten van hetzelfde getal: rMSSD meet de variatie tussen opeenvolgende hartslagen en weerspiegelt daarmee direct parasympathische activiteit — precies wat herstel is. SDNN zegt vooral iets over de spreiding over het hele venster en is aantoonbaar minder geschikt voor het volgen van veranderingen *binnen* één persoon, wat hier de hele bedoeling is.
 
-**Gevolg: HealthKit is het complete pad, niet de bodem.** Geen cloud-API van een fabrikant, geen onofficiële scraper, geen abonnement. Dat schrapt een hele klasse fragiliteit uit het ontwerp.
+**2. Altini's eigen criterium wijst naar de ring.** Zijn bezwaar tegen nachtelijke HRV gold *sporadische* metingen: die meten in welke slaapfase je toevallig zat. Zijn conclusie was dat alleen continue metingen over de hele nacht zouden werken — "wat het horloge niet kan leveren". De Oura kan dat wél. Het argument dat eerder tegen nachtmeting pleitte, pleit bij continue meting juist vóór.
 
-Wat het horloge 's nachts bovendien meelevert: slaapfases (REM, kern, diep, wakker), rust-hartslag, ademfrequentie, polstemperatuur en zuurstofsaturatie — plus de Vitals-app, die daar zelf een persoonlijke bandbreedte omheen berekent en afwijkingen markeert. Dat is in de kern gratis wat Oura "readiness" noemt. En **State of Mind** voedt de Hoofd-score met een gestandaardiseerde stemmingsregistratie die anders handmatig zou moeten.
+Daar komt bij dat de matrasmat op het punt dat er het meest toe doet zwak is: **63% nauwkeurigheid in slaapfase-bepaling**, met licht versus diep als grootste struikelblok. Slaap-wakker detecteert hij prima, maar dit ontwerp leunt op de architectuur van de nacht. Oura zit rond 80% overeenstemming met polysomnografie.
 
-### Het horloge gaat 's nachts niet om — en voor HRV is dat beter
+### Wat het abonnement werkelijk kost
 
-Vastgesteld: een horloge dragen in bed is geen optie. Dat klinkt als een probleem voor de belangrijkste hersteldriver, maar bij nader onderzoek is het tegenovergestelde waar.
+De €70 per jaar blijft een echt bezwaar, en de API vervalt zodra je stopt met betalen. Maar voor jouw situatie is dat minder zwaar dan voor een gewone Oura-gebruiker, om één reden: **jouw app is het archief.**
 
-**Apple's automatische HRV-metingen deugen niet.** Marco Altini (HRV4Training, gepromoveerd op HRV) laat zien dat dezelfde geëxporteerde dataset twee keer achter elkaar 50 ms en 100 ms opleverde — de achtergrondmetingen worden niet gevalideerd. Daar komt bij dat losse nachtmetingen fysiologisch weinig zeggen: HRV stijgt gedurende de nacht mee met het circadiane ritme en fluctueert per slaapfase, dus een willekeurig nachtsample meet vooral *in welke slaapfase je toevallig zat*.
+Elke nacht wordt via de officiële API naar de Synology getrokken en daar opgeslagen. Stop je ooit met het lidmaatschap, dan houd je honderd procent van je historie in je eigen database. Je huurt dus niet je data — je huurt de sensorstroom. Dat is een veel gewonere afspraak.
 
-Wat het horloge wél goed doet, is een **handmatig getriggerde meting via de Mindfulness-app**. En omdat die telkens in exact dezelfde omstandigheden plaatsvindt, is hij beter vergelijkbaar dan welk nachtgemiddelde ook.
+Bijkomend: de API-route haalt de telefoon uit het kritieke pad. De Synology belt zelf uit, dus geen outbox, geen tailnet-afhankelijkheid en geen stille syncfouten voor de belangrijkste dataset die je hebt.
 
-**Het protocol dat we implementeren:**
+| | Overdag | 's Nachts |
+|---|---|---|
+| Apparaat | Apple Watch Ultra 2 | Oura Ring 4 |
+| Route | HealthKit, native | Officiële API → Synology |
+| Levert | workouts, HR-zones, State of Mind, stappen | slaapfases, rMSSD, rust-HR, huidtemperatuur, ademfrequentie |
+| Telefoon nodig | ja | nee |
 
-1. Wakker worden, naar de wc.
-2. **Rechtop zitten** — dat legt een orthostatische prikkel op en maakt parasympathische activiteit zichtbaar.
-3. Horloge om, Mindfulness-app, 1–2 minuten.
-4. **Normaal ademhalen, niet meeademen met de animatie** — diep ademen blaast de waarde kunstmatig op. Zet daarom de haptische pulsjes uit: Watch-app → Mindfulness → Haptics → Geen.
-5. Vóór je je telefoon pakt. Mail en berichten zijn stressoren en die meet je mee.
+### Implementatieregel: HRV-bronnen mag je nooit mengen
 
-### Implementatieregel: HRV-samples zijn niet onderling vergelijkbaar
+Dit is precies het soort bug dat je pas na maanden ontdekt. Er komen straks HRV-waarden uit twee incompatibele bronnen: Apple SDNN (achtergrond- en mindfulness-metingen) en Oura rMSSD. Een Apple-waarde van 35 ms en een Oura-waarde van 35 ms betekenen **niet** hetzelfde.
 
-Hieruit volgt een harde regel voor §5, en het is precies het soort bug dat je pas na maanden ontdekt.
+- **Oura rMSSD is de enige HRV-bron voor de Lichaam-score.** Apple's SDNN-samples worden bij het berekenen van baselines genegeerd — bewaren mag, meewegen niet.
+- Eén waarde per nacht, uit de API.
+- Wissel nooit van bron. Doe je dat toch, dan begint de baseline opnieuw en duurt het zeker 60 dagen voordat de trend weer iets betekent.
 
-In HealthKit landen `heartRateVariabilitySDNN`-samples uit drie verschillende contexten: automatische achtergrondmetingen, slaapmetingen en Mindfulness-sessies. **Die zijn niet uitwisselbaar** — een mindfulness-meting ligt structureel hoger dan een slaapgemiddelde. Ze bij elkaar in één baseline gooien levert een trend op die vooral je meetgedrag volgt in plaats van je fysiologie.
+### Als je het abonnement toch niet wilt
 
-De baseline-berekening moet daarom filteren, niet middelen:
+Dan is de terugvaloptie de **Withings Sleep Analyzer** (~€130–170 eenmalig) onder het matras, gecombineerd met een handmatige ochtendmeting voor HRV: rechtop zitten na het opstaan, Mindfulness-app, 1–2 minuten, normaal ademhalen (haptics uit via Watch-app → Mindfulness → Haptics → Geen), vóór je je telefoon pakt.
 
-- Neem alleen HRV-samples die binnen een `mindfulSession`-venster van diezelfde ochtend vallen.
-- Eén meting per dag, vóór 12:00; latere metingen negeren.
-- Wissel nooit van methode. Wie toch overstapt, start een nieuwe baseline — minimaal 60 dagen voordat de trend weer betekenis heeft.
+Dat werkt, maar je levert drie dingen in: slaapfases van 63% in plaats van 80% nauwkeurigheid, SDNN in plaats van rMSSD, en een dagelijks ritueel dat afhangt van discipline — precies het type gewoonte waarvan §13 zegt dat het verwatert. Let ook op de randvoorwaarden van de mat: matras tussen 10 en 40 cm, geen waterbed, een lattenbodem met voldoende ondersteuning, en bij een gedeeld bed kan de beweging van je partner meelekken.
 
-### Slaap zelf: de matrasmat
-
-Voor de slaapdata zelf komt er dan een apparaat dat je niet draagt: de **Withings Sleep Analyzer** onder het matras, ~€130–170 eenmalig, geen abonnement. Slaapfases, hartslag, ademhalingsstoringen en snurken, via Health Mate naar Apple Health. Niets omdoen, niets opladen.
-
-Wat je hiermee opgeeft ten opzichte van 's nachts het horloge dragen:
-
-| Verlies | Ernst |
-|---|---|
-| Polstemperatuur | matig — aardig vroeg ziektesignaal, maar geen kernmetric |
-| Zuurstofsaturatie 's nachts | klein |
-| Vitals-app met eigen bandbreedtes | **geen** — §5 rekent zijn eigen baselines uit, dus dit was toch al dubbelop |
-| Nachtelijk HRV-gemiddelde | **geen** — het ochtendprotocol hierboven is aantoonbaar beter |
-
-Netto: je levert polstemperatuur in en krijgt er betere HRV en een comfortabele nacht voor terug. Dat is een goede ruil.
-
-**De valkuil: Tailscale.** De app kan de NAS alleen bereiken als het tailnet up is. Achtergrondsync terwijl de VPN uit staat mislukt — en dat mag niet stil gebeuren. Oplossing:
-
-1. **Outbox.** Elke delta gaat eerst in een lokale SQLite-queue. Verzenden is een aparte stap; mislukt hij, dan blijft het item staan.
-2. **Retry.** Bij elke app-start, elke background-wake en elke succesvolle netwerkwijziging wordt de queue leeggewerkt.
-3. **Watchdog.** De server kijkt dagelijks of er data binnenkwam en stuurt anders een ntfy-push. Die logica staat er al (`grip/notify.py`) en verhuist mee.
-4. **Zichtbaarheid.** De app toont "laatste sync: 14 min geleden" en hoeveel items in de wachtrij staan. Nooit meer raden.
-
-Een tweede reden dat HealthKit soms niets teruggeeft: **health-data is versleuteld zolang de telefoon vergrendeld is na een herstart**. Background delivery levert pas na de eerste ontgrendeling. Dat is geen bug om weg te programmeren maar een eigenschap om omheen te ontwerpen — vandaar de outbox in plaats van "verzenden of verloren".
-
----
 
 ## 4. Datamodel
 
@@ -166,8 +136,11 @@ Weg met health-data-in-trackers. Aparte, getypeerde tabellen:
 
 ```
 health_daily(date PK, steps, active_kcal, exercise_min, stand_hours,
-             distance_km, weight_kg, resting_hr, hrv_sdnn, vo2max,
+             distance_km, weight_kg, resting_hr, vo2max,
              respiratory_rate, mindful_min, updated_at)
+
+hrv_daily(date PK, value_ms, metric CHECK(metric IN ('rmssd','sdnn')),
+          source, context, updated_at)   -- nooit mengen, zie §3
 
 sleep_nights(date PK, bedtime, waketime, total_min, deep_min, rem_min,
              core_min, awake_min, efficiency, source)
@@ -365,7 +338,7 @@ Fase 1 en 2 zijn samen al een bruikbaar product: je krijgt data die je nu niet h
 
 ## 14. Open vragen
 
-1. **Ochtendritueel:** het HRV-protocol uit §3 staat of valt bij consistentie — elke ochtend, zelfde volgorde, vóór de telefoon. Wil je dat de app je eraan herinnert met een push, of vertrouw je op gewoonte?
+1. **Ringmaat en abonnement.** Oura werkt met een pasring-set vooraf; reken op een week levertijd voor je de eerste nacht meet. Wil je maand- of jaarbetaling (jaarlijks is ~€70 versus ~€72 per jaar bij maandelijks, dus nauwelijks verschil — maandelijks houdt je opties open).
 2. **Welke metrics zeggen jóu iets?** Ik kan alles binnenhalen, maar het dashboard moet klein blijven. Noem de vijf die je écht wilt zien.
 3. Wat bedoelde je met **"een versie die op mijn telefoon draait"** bij de werkdata?
 4. **Werktijden en agenda's:** welke uren tellen als werkdag, welke agenda's meenemen, tellen hele-dag-afspraken mee, en vanaf hoeveel minuten is iets een focusblok?
