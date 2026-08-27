@@ -104,6 +104,27 @@ Steps, calorieën en beweegminuten zijn nadrukkelijk de *minst* waardevolle metr
 
 **Acceptatietest bij aanschaf, één nacht:** draag hem, en kijk de volgende ochtend in Apple Gezondheid onder *Slaap* of je een fase-verdeling ziet (diep / REM / kern / wakker) en onder *Hart → HRV* of er een nachtwaarde staat. Staan die er niet, dan is de band ongeschikt — hoe goed zijn eigen app ook is.
 
+### De harde bevinding: HRV landt nooit in HealthKit
+
+Uitgezocht per fabrikant, en de uitkomst is opvallend consistent: **geen enkele derde partij schrijft HRV naar Apple Health.**
+
+| Apparaat | Slaapfases → HealthKit | HRV → HealthKit | Officiële API | Kosten |
+|---|---|---|---|---|
+| **Garmin CIRQA** | ja | **nee** | nee — alleen onofficieel | **€199 eenmalig** |
+| Oura Ring 4 | ja | **nee** | ja, OAuth v2 | ~$349 + $70/jr |
+| Whoop 5.0 | sessie, geen fases | **nee** (rMSSD vs SDNN) | ja, v2 | $199/jr, hardware inbegrepen |
+| Amazfit Helio Strap | nee — één blok | gedeeltelijk | nee | ~$99 |
+| Apple Watch SE | ja, native | **ja, native** | n.v.t. | ~$249 |
+
+Apple's eigen Watch is het enige apparaat dat `heartRateVariabilitySDNN` zelf wegschrijft. Voor al het andere geldt: HealthKit is de bodem, niet het plafond.
+
+**Ontwerpgevolg:** de architectuur mag niet aannemen dat HealthKit het universele pad is. Er zijn er twee, en ze vullen elkaar aan:
+
+- **HealthKit als duurzame bodem.** Slaapfases, rust-hartslag, stappen, workouts. Werkt altijd, breekt nooit, vereist niets van een fabrikant.
+- **Een tweede pad voor de rest.** HRV, readiness, huidtemperatuur. Hoe dat pad eruitziet verschilt per merk — zie hieronder.
+
+Valt het tweede pad weg, dan degradeert de Lichaam-score naar slaap plus rust-hartslag. Minder scherp, maar niet stuk. Dat is bewust: geen enkele metric mag een single point of failure zijn.
+
 ### Tweede route: rechtstreeks uit de cloud van de fabrikant
 
 Bij abonnementsapparaten (Oura, Whoop) is HealthKit juist de *slechtste* route. Beide houden hun beste data achter: Oura schrijft wel slaapfases naar Apple Health maar **geen HRV en geen rust-hartslag**; Whoop schrijft **helemaal geen HRV** omdat Apple SDNN opslaat en Whoop rMSSD meet.
@@ -123,6 +144,10 @@ Synology  ──nachtelijke pull met refresh token──►  Oura / Whoop cloud
 | Afhankelijkheid | HealthKit-bridge | OAuth refresh token; API kan veranderen |
 
 Voor die apparaten verdwijnt de hele sync-problematiek uit §3 dus: de Synology haalt 's nachts zelf op. De iOS-app blijft nodig voor de agenda (EventKit), de check-in en het dagbeeld, maar niet meer als koerier.
+
+**Garmin heeft geen persoonlijke API.** Het Connect Developer Program eist een rechtspersoon en wijst privéaanvragen af. Wat wél werkt is `python-garminconnect`: een onderhouden Python-bibliotheek die met je eigen inloggegevens hartslag, slaap, stress, SpO2, HRV en Body Battery ophaalt. Onofficieel, en het is een kat-en-muisspel — Garmin schroefde in maart 2026 de botdetectie aan, waarna de bibliotheek zijn login op `curl_cffi` herbouwde en het weer deed.
+
+Voor een privéproject op je eigen NAS is dat een aanvaardbaar risico, mits je het goed inricht: de bibliotheek levert de *verrijking* (HRV, Body Battery), HealthKit levert de *bodem* (slaapfases, rust-HR). Breekt de bibliotheek, dan mis je scherpte, geen data.
 
 **De valkuil: Tailscale.** De app kan de NAS alleen bereiken als het tailnet up is. Achtergrondsync terwijl de VPN uit staat mislukt — en dat mag niet stil gebeuren. Oplossing:
 
@@ -340,9 +365,7 @@ Fase 1 en 2 zijn samen al een bruikbaar product: je krijgt data die je nu niet h
 
 ## 14. Open vragen
 
-1. **Welk apparaat wordt het?** Vastgesteld: geen Apple Watch. Twee routes, met verschillende architectuur (§3):
-   - **Zonder abonnement** → alles via HealthKit. Garmin is de enige grote fabrikant met officiële slaapfase-sync naar Apple Health; Amazfit levert slaap als één blok.
-   - **Met abonnement** → via de cloud-API. Oura geeft de rijkste dataset (fases, HRV, huidtemperatuur, readiness); Whoop is sterker op trainingsbelasting.
+1. **Welk apparaat wordt het?** Vastgesteld: geen Apple Watch. Aanbeveling: **Garmin CIRQA** (€199, geen abonnement) — meet alles wat dit ontwerp nodig heeft, is de goedkoopste van het veld, en kan op de bovenarm gedragen worden waar de hartslagmeting volgens onafhankelijke tests een borstband benadert. Zie de tabel in §3 voor het alternatief als je toch een abonnement wilt.
 2. **Welke metrics zeggen jóu iets?** Ik kan alles binnenhalen, maar het dashboard moet klein blijven. Noem de vijf die je écht wilt zien.
 3. Wat bedoelde je met **"een versie die op mijn telefoon draait"** bij de werkdata?
 4. **Werktijden en agenda's:** welke uren tellen als werkdag, welke agenda's meenemen, tellen hele-dag-afspraken mee, en vanaf hoeveel minuten is iets een focusblok?
