@@ -118,6 +118,13 @@ Uitgezocht per fabrikant, en de uitkomst is opvallend consistent: **geen enkele 
 
 Apple's eigen Watch is het enige apparaat dat `heartRateVariabilitySDNN` zelf wegschrijft. Voor al het andere geldt: HealthKit is de bodem, niet het plafond.
 
+**Twee dingen die de keuze tussen Oura en CIRQA beslissen, en die zelden in reviews staan:**
+
+1. **Oura's API is gehuurd, niet bezeten.** Zonder actief lidmaatschap vervalt de API-toegang — precies het datapad waar de architectuur op zou leunen. Je betaalt dus €70 per jaar, blijvend, om je eigen zelfgehoste app data te laten ontvangen. Dat is de afhankelijkheid die deze hele Synology-opzet juist wil vermijden.
+2. **Een ring meet inspanning slecht.** Oura's workout-hartslag reageert traag ten opzichte van een borstband en onderrapporteert bij activiteiten zonder vingerbeweging — fietsen, yoga. Bovendien moet de ring dan *zeer* strak zitten, strakker dan comfortabel is voor de hele dag. De CIRQA op de bovenarm benadert juist een borstband.
+
+Aangezien workouts expliciet in de opdracht staan, weegt punt 2 zwaar en punt 1 structureel.
+
 **Ontwerpgevolg:** de architectuur mag niet aannemen dat HealthKit het universele pad is. Er zijn er twee, en ze vullen elkaar aan:
 
 - **HealthKit als duurzame bodem.** Slaapfases, rust-hartslag, stappen, workouts. Werkt altijd, breekt nooit, vereist niets van een fabrikant.
