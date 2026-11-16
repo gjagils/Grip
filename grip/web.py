@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from grip.database import get_app_state, get_db, init_db, set_app_state
 from grip.questions import get_daily_questions, get_reflection_questions, get_weekly_questions
-from grip import insights, notify
+from grip import insights, notify, workouts
 
 BASE_DIR = Path(__file__).parent
 
@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Grip", lifespan=lifespan)
+app.include_router(workouts.router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 

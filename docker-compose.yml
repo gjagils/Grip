@@ -11,6 +11,7 @@ services:
       - NTFY_URL=${NTFY_URL}
       - NTFY_TOKEN=${NTFY_TOKEN}
       - WATCHDOG_HOUR=${WATCHDOG_HOUR}
+      - WORKOUT_MODEL=${WORKOUT_MODEL}
     volumes:
       - grip-data:/data
 

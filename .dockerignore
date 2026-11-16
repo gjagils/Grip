@@ -9,3 +9,4 @@ __pycache__
 .venv
 tests
 docker-compose*.yml
+ios/
